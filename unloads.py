@@ -2385,3 +2385,578 @@ def unload(file_name):
         ])
 
         w.writerows(data)
+
+
+# scp root@supl.biz:/tmp/sales_leads_opening_contacts_on_demo.csv ~/sales_leads_opening_contacts_on_demo.csv
+
+file_name = 'orders_in_payment_april-sept'
+
+
+def unload(file_name):
+    import csv
+
+    data = get_data2()
+    with open(f'/tmp/{file_name}.csv', 'w+') as f:
+        w = csv.writer(f)
+
+        w.writerow([
+            'Месяц',
+            'Холодные',
+            'Повторные',
+            'Теплые',
+        ])
+
+        w.writerows(data)
+
+
+def get_data():
+    import datetime
+    from tqdm import tqdm
+    from project.apps.orders.models import OrderSourceEnum
+
+    rubric = Rubric.objects.get(id=1809)
+    rub_desc = rubric.get_descendants(include_self=True)
+    months = (4, 5, 6, 7, 8, 9)
+
+    data = []
+    for month in tqdm(months):
+        month_name = datetime.date(2019, month, 1).strftime('%B')
+
+        orders = Order.objects.filter(
+            created_at__year=2019,
+            created_at__month=month,
+            rubrics__in=rub_desc
+        )
+        data.append([
+            month_name,
+            orders.filter(source=OrderSourceEnum.COLD_CUSTOMER).count(),
+            orders.filter(source=OrderSourceEnum.REPEATABLE_CUSTOMER).count(),
+            orders.filter(source=OrderSourceEnum.WARM_CUSTOMER).count(),
+        ])
+
+    return data
+
+
+def get_data2():
+    import datetime
+    from django.utils import timezone
+    from tqdm import tqdm
+    from project.apps.orders.models import OrderSourceEnum
+
+    ct = ContentType.objects.get_by_natural_key('orders', 'order')
+    rubric = Rubric.objects.get(id=1809)
+    rub_desc = rubric.get_descendants(include_self=True)
+    months = (4, 5, 6, 7, 8, 9)
+
+    data = []
+    for month in tqdm(months):
+        month_name = datetime.date(2019, month, 1).strftime('%B')
+
+        subscriptions = Subscription.objects.active().filter(
+            created_at__month=month + 1,
+            created_at__year=2019,
+            actual_payment__isnull=False
+        )
+
+        total_order_ids = []
+        for subscription in subscriptions:
+            creation_date = subscription.start_date
+            creation_date_minus_30_days = creation_date - timezone.timedelta(days=30)
+            user_id = subscription.user_id
+            order_ids = Click.objects.filter(
+                content_type=ct,
+                user_id=user_id,
+                created_at__date__range=(
+                    creation_date_minus_30_days, creation_date
+                )
+            ).values_list('object_id', flat=True)
+            total_order_ids.extend(order_ids)
+
+        orders = Order.objects.filter(
+            id__in=total_order_ids,
+            rubrics__in=rub_desc,
+        )
+        data.append([
+            month_name,
+            orders.filter(source=OrderSourceEnum.COLD_CUSTOMER).count(),
+            orders.filter(source=OrderSourceEnum.REPEATABLE_CUSTOMER).count(),
+            orders.filter(source=OrderSourceEnum.WARM_CUSTOMER).count(),
+        ])
+
+    return data
+
+
+file_name = 'major_users'
+
+
+def unload(file_name):
+    import csv
+
+    data = get_data()
+    with open(f'/tmp/{file_name}.csv', 'w+') as f:
+        w = csv.writer(f)
+        w.writerows(data)
+
+
+def get_data():
+    from itertools import groupby
+    from funcy import first
+
+    subscriptions = Subscription.objects.exclude_demo().order_by('user', '-start_date')
+
+    data = [['link', 'название компании', 'название тарифа', 'сколько раз был на тарифе', 'дата начала тарифа', 'дата окончания тарифа',
+             'рубрики из профиля', 'ориджин', 'продавец последний']]
+    grouped = groupby(subscriptions, key=lambda x: x.user)
+    for user, subs in grouped:
+        all_subs = list(subs)
+        first_sub = first(all_subs)
+
+        if len(all_subs) > 1:
+            data.append([
+                f'https://admin.supl.biz/profiles/{user.id}/',
+                user.title,
+                first_sub.tariff.title,
+                len(all_subs),
+                first_sub.start_date,
+                first_sub.finish_date,
+                ', '.join(user.rubrics.values_list('title', flat=True)),
+                user.origin.title if user.origin else '',
+                first_sub.seller.name if first_sub.seller else '',
+            ])
+
+    return data
+
+
+
+
+"""
+нужны данные по заказам в каждой подрубрике раздела Металл – кол-во заказов 
+в каждой подрубрике и сами заказы (с текстом заказа), 
+и количеством предложений на каждый заказ (если есть возможность еще выгрузить, 
+что там за предложения были, будет супер). Выгрузка нужна за всё время.
+"""
+
+
+def unload(file_name='orders_metals_stats'):
+    import csv
+
+    data = get_data_stats()
+    with open(f'/tmp/{file_name}.csv', 'w+') as f:
+        w = csv.writer(f)
+        w.writerows(data)
+
+
+def get_data_stats():
+    from tqdm import tqdm
+
+    metals = Rubric.objects.get(title='Металлы').get_descendants(include_self=True)
+
+    data = [[
+        'Рубрика',
+        'ФО',
+        'Количество заказов',
+    ]]
+    fo = Region.objects.get(id=1).get_children()
+    for rubric in tqdm(metals):
+        for district in fo:
+            orders = Order.objects.filter(
+                rubrics__in=[rubric],
+                regions__in=[district],
+            ).exclude(status=OrderStatusEnum.DELETED)
+
+            data.append([
+                rubric.title,
+                district.title,
+                orders.count(),
+            ])
+
+    return data
+
+
+def unload():
+    import csv
+    from tqdm import tqdm
+
+    metals = Rubric.objects.get(title='Металлы').get_descendants(
+        include_self=True)
+
+    for rubric in tqdm(metals):
+        data = get_data(rubric)
+
+        with open(f'/tmp/orders/orders_{"_".join(rubric.title.split()).replace("/", "")}.csv', 'w+') as f:
+            w = csv.writer(f)
+            w.writerows(data)
+
+
+def get_data(rubric):
+    from project.apps.offers.models import OfferStatusEnum
+
+    data = [[
+        'Ссылка на заказ',
+        'Дата создания заказа',
+        'Описание заказа',
+        'Дата создания предложения',
+        'Текст предложения',
+    ]]
+
+    orders = Order.objects.filter(
+        rubrics__in=[rubric],
+    ).exclude(status=OrderStatusEnum.DELETED)
+
+    for order in orders:
+        offers = order.offers.filter(status=OfferStatusEnum.PUBLISHED)
+
+        data.append([
+            f'https://admin.supl.biz/orders/{order.id}/',
+            order.created_at,
+            order.description,
+        ])
+
+        for offer in offers:
+            data.append([
+                '',
+                '',
+                '',
+                offer.created_at,
+                offer.description,
+            ])
+
+    return data
+###############################
+def need_reset(lead: SalesLead):
+    calls = lead.actiononsalesleads.filter(
+        caller=lead.caller
+    ).order_by('-processed_at')
+
+    calls_data = list(calls.values('duration', 'processed_at'))
+
+    filters = (
+        (1, lambda x: x >= 3),
+        (2, lambda x: x >= 4),
+        (3, lambda x: x >= 11),
+        (4, lambda x: x >= 21),
+        (5, lambda x: x >= 41),
+        (6, lambda x: x >= 61),
+    )
+
+    info = []
+    for month, condition in filters:
+        date = get_months_ago(month)
+        duration = sum(
+            x['duration']
+            for x in filter(lambda c: c['processed_at'] >= date, calls_data)
+        )
+
+        info.append(f'длит-ть за посл. {month} мес. = {duration}')
+
+        if condition(duration):
+            return False, info
+
+    return True, info
+
+
+def get_months_ago(amount: int):
+    """Возвращает дату, количество 'amount' месяцев назад. """
+    now = timezone.now()
+    if amount is None:
+        return now
+
+    days = amount * 30
+
+    if days:
+        # См SUP-2967
+        days = days - 1
+    return now - timezone.timedelta(days=days)
+
+
+def unload(leads, file_name='reset_07-11'):
+    import csv
+
+    data = get_data(leads)
+    with open(f'/tmp/{file_name}.csv', 'w+') as f:
+        w = csv.writer(f)
+        w.writerows(data)
+
+
+def get_data(leads):
+    print(len(leads))
+
+    data = []
+    for lead in leads:
+
+        need_res, info = need_reset(lead)
+        data.append([
+            f'https://admin.supl.biz/profiles/{lead.user_id}/',
+            *info
+        ])
+
+    return data
+
+
+def enrich_unload():
+    import csv
+    import re
+
+    file_name = '/tmp/reset_07-11.csv'
+    f = open(file_name, 'r', encoding='utf-8')
+    file = csv.reader(f)
+    next(file)
+
+    f_output = open(f'/tmp/reset_07-11-enriched.csv', 'w+')
+    w_output = csv.writer(f_output)
+    w_output.writerow(['Ссылка', 'звонящий до сброса', 'новый звонящий'])
+
+    for row in file:
+        link, *attrs = row
+
+        user_id = int(re.findall(r'\d+', link)[0])
+
+        log = ResetStatusLog.objects.filter(
+            created_at__date=timezone.now(),
+            status=ResetStatusLogEnum.RESET_STATUS_TASK,
+            lead__user_id=user_id,
+        ).first()
+
+        if not log:
+            continue
+
+        w_output.writerow([
+            link,
+            log.old_caller.name if log.old_caller else '?',
+            log.lead.caller.name if log.lead.caller else '?',
+            *attrs
+        ])
+
+# KAluga companies
+def unload():
+    import csv
+
+    data = get_data()
+
+    with open(f'/tmp/users_kaluga.csv', 'w+') as f:
+        w = csv.writer(f)
+        w.writerows(data)
+
+
+def get_data():
+    """
+    Нужна выгрузка по компаниям калужской области, всем, у кого есть активности с полями:
+        1) ссылка на профиль (так чтобы ссылка открывалась у незалогиненного пользователя);
+        2) название компании;
+        3) количество заказов;
+        4) дата последнего заказа;
+        5) количество предложений;
+        6) дата последнего предложения;
+        7) список ориджинов заказчиков, в которых вытавлял предложение;
+        8) количество заказов под пользователя в год (вот как в Джарвисе показывается)
+        9) количество выгруженных товаров;
+        10) На тарифе (да/нет)
+
+    :return:
+    """
+
+    from django.db.models import Q
+    from project.apps.users.utils.utils import get_dict_of_list_orders_count
+    from tqdm import tqdm
+
+    kaluga_desc = Region.objects.get(
+        title='Калужская область').get_descendants(include_self=True)
+
+    data = [[
+        'ссылка на профиль',
+        'название компании',
+        'количество заказов',
+        'дата последнего заказа',
+        'количество предложений',
+        'дата последнего предложения',
+        'список ориджинов заказчиков, в которых вытавлял предложение',
+        'количество заказов под пользователя в год',
+        'количество выгруженных товаров',
+        'На тарифе',
+    ]]
+
+    now = timezone.now()
+    users = list(User.objects.filter(
+        origin__in=kaluga_desc,
+    ).filter(
+        Q(orders__created_at__gt=now - timezone.timedelta(days=365)) |
+        Q(offers__created_at__gt=now - timezone.timedelta(days=365)) |
+        Q(proposals__isnull=False)
+    ).distinct())
+
+    for user in tqdm(users):
+        last_order = user.orders.order_by('-actualized_at').first()
+        last_offer = user.offers.order_by('-created_at').first()
+
+        origins_from_offers = user.offers.values_list('order__user__origin', flat=True)
+        origins_from_offers = Region.objects.filter(id__in=origins_from_offers)
+
+        regions = user.regions.all()
+        rubrics = user.rubrics.all()
+        only_own_regions = user.only_own_regions
+        list_orders_count = get_dict_of_list_orders_count(only_own_regions, regions=regions, rubrics=rubrics)
+
+        data.append([
+            f'https://supl.biz/profiles/{user.id}/',
+            user.company_name or user.title,
+            user.orders.count(),
+            last_order.actualized_at if last_order else '',
+            user.offers.count(),
+            last_offer.created_at if last_offer else '',
+            ', '.join([r.title for r in origins_from_offers]),
+            list_orders_count['year'],
+            user.proposals.count(),
+            'да' if user.on_tariff else 'нет',
+        ])
+
+    return data
+
+##########
+
+def unload(rubric_title='Металлы', region_title='Уральский федеральный округ'):
+    import csv
+
+    data = get_data(rubric_title, region_title)
+    now = timezone.now()
+    file_name = f'{now.date()}rubric_stats.csv'
+    print(file_name)
+
+    with open(f'/tmp/{file_name}', 'w+') as f:
+        w = csv.writer(f)
+        w.writerows(data)
+
+
+def get_data(rubric_title, region_title):
+    """
+    выгрузи пожалуйста информацию по металлам в столбцах: РФ, Уральский ФО
+    в строках:
+    кол-во заказчиков
+    2013 г.
+    ...
+    2019 г.
+    кол-во поставщиков
+    2013 г.
+    ...
+    2019 г.
+    В значениях соответственно кол-во заказчиков за год по РФ и Уралу
+    и кол-во поставщиков за год по РФ и Уралу
+
+    :return:
+    """
+    from tqdm import tqdm
+
+    try:
+        rubrics = Rubric.objects.get(
+            title=rubric_title
+        ).get_descendants(include_self=True)
+
+        rus = Region.objects.get(title='Россия')
+        fo = Region.objects.get(title=region_title)
+        districts = list(fo.get_descendants().filter(level=2).order_by('title'))
+        regions = [rus, fo] + districts
+    except Exception:
+        print('Проверьте название рубрики и региона')
+        return
+
+    data = [['Год'] + [r.title for r in regions]]
+
+    for year in tqdm(list(range(2013, timezone.now().year + 1))):
+        customers = []
+        suppliers = []
+        for region in regions:
+            region_desc = region.get_descendants(include_self=True)
+
+            orders = Order.objects.filter(
+                user__regions__in=region_desc,
+                user__rubrics__in=rubrics,
+                created_at__year=year,
+            )
+            customers_count = orders.order_by(
+                'user_id'
+            ).values_list('user_id').distinct('user_id').count()
+
+            suppliers_count = User.objects.filter(
+                regions__in=region_desc,
+                rubrics__in=rubrics,
+                date_joined__year=year,
+            ).distinct().count()
+
+            customers.append(customers_count)
+            suppliers.append(suppliers_count)
+
+        data.append([f'З {year}'] + customers)
+        data.append([f'П {year}'] + suppliers)
+
+    return data
+
+
+rubrics = Rubric.objects.get(
+    title='Металлы'
+).get_descendants(include_self=True)
+regions = Region.objects.get(title='Россия').get_descendants(include_self=True)
+print(rubrics.count())
+print(regions.count())
+
+# orders = Order.objects.filter(
+#     user__regions__in=regions,
+#     user__rubrics__in=rubrics,
+#     created_at__year=2019,
+# )
+users = User.objects.filter(
+    regions__in=regions,
+    rubrics__in=rubrics,
+    orders__created_at__year=2019
+).distinct()
+users = users.values_list('id', flat=True)
+users_count = len(set(list(users)))
+print(users_count)
+
+
+def unload():
+    import csv
+    from tqdm import tqdm
+
+    for month in tqdm([6, 7, 8, 9, 10, 11]):
+
+        data = get_data(month)
+
+        with open(f'/tmp/users/users_for_context_0{month}-2019.csv', 'w+') as f:
+            w = csv.writer(f)
+            w.writerows(data)
+
+
+def get_data(month):
+    """
+    нужна выгрузка за последние 6 месяцев по месяцам: пользователь оплатил
+    тариф - его рубрики - заказы, на которые он оставлял предложения.
+    хотим понять какие лиды привлекать из контекстной рекламы
+    """
+    from project.apps.tariffs.models import Subscription
+
+    data = [['ссылка', 'рубрики', 'заказы, на которые оставлял предложения']]
+
+    subscriptions = Subscription.objects.exclude_demo().filter(
+        start_date__year=2019,
+        start_date__month=month
+    ).order_by('start_date')
+
+    users = User.objects.filter(
+        id__in=subscriptions.values_list('user', flat=True)
+    )
+
+    for user in users:
+        orders_ids = user.offers.values_list('order_id', flat=True)
+        orders = Order.objects.filter(id__in=orders_ids)
+
+        data.append([
+            f'https://admin.supl.biz/profiles/{user.id}/',
+            ', '.join([r.title for r in user.rubrics.all()])
+        ])
+
+        for order in orders:
+            data.append([
+                '', '',
+                f'https://supl.biz/orders/{order.id}/'
+            ])
+
+    return data

@@ -1,13 +1,13 @@
 # PostgreSql
-create database suplbiz_db_auth;
-create user suplbiz_user with encrypted password 'suplbiz_password';
-grant all privileges on database suplbiz_db_auth to suplbiz_user;
+create database suplbiz_db_events;
+create user suplbiz_events_user with encrypted password 'suplbiz_events_password';
+grant all privileges on database suplbiz_db_events to suplbiz_events_user;
 docker exec -it suplbiz-root-repo_db_1 psql -U suplbiz_user -d suplbiz_db
 
 # Rabbitmq
 docker exec -it suplbiz-root-repo_rabbitmq_1 bash
-rabbitmqctl add_vhost microservices
-rabbitmqctl set_permissions -p microservices suplbiz ".*" ".*" ".*"
+rabbitmqctl add_vhost clickstream
+rabbitmqctl set_permissions -p clickstream suplbiz ".*" ".*" ".*"
 
 python3 project/libs/microservices/consumer.py  --srcmicroservice monolith --maxevents 1
 
@@ -22,6 +22,56 @@ MHcCAQEEII4kKEvu2kx47d2fzaqet3W73yLu5Bz0iA2OoGkKfYsyoAoGCCqGSM49
 AwEHoUQDQgAE8CAEnDDBX6pkTFqvQetNbrNrMYQBM8sQZVkTEmJujzccc/3LSM+U
 7ap55XoD/3ad5tvp/GDFLOv9riUBulqwYw==
 -----END EC PRIVATE KEY-----
+
+# Clickstream
+
+
+# Создать контейнер руками (надо сначала запушить образ в docker.supl.biz; docker login ... -> docker build ... -> docker push)
+# затем спуллить его на сервере (docker login -> docker pull)
+# И затем руками создать контейнер
+docker login -u suplbiz -p W3wpR0tJPlDcqf7asOXreU8o218JyChXL0e8skWvjt4PWKmGbI7v8Wp9SzMn docker.supl.biz
+docker pull docker.supl.biz/front-administration:9eec48bf
+
+
+
+docker run -d --restart=always \
+    --sysctl net.core.somaxconn=4096 \
+    --name front-administration-3100 \
+    --publish 3100:3000 \
+    --log-driver=syslog \
+    --log-opt tag=suplbiz/front-administration-3100 \
+    -e BRANCH=sandbox \
+    -e SERVICE_NAME=front-administration \
+    -e SERVICE_TAGS=front,urlprefix-admin.sandbox.supl.biz/ \
+    -e SERVICE_CHECK_TCP=true \
+    -e SERVICE_CHECK_INTERVAL=10s \
+    -e SERVICE_CHECK_TIMEOUT=3s \
+    -e API_HOST=https://sandbox.supl.biz \
+    -e SENTRY_DSN=https://2ee154e846b04f46b10a7efd4ebbecd2@sentry.supl.biz/12 \
+    -e SENTRY_DSN_PRIVATE=https://2ee154e846b04f46b10a7efd4ebbecd2:dcde543412a24765b6a0bd849c5aeff7@sentry.supl.biz/12 \
+    -v /tmp:/tmp \
+    --memory="8g" --memory-swap=0 --memory-swappiness=0 \
+    docker.supl.biz/front-administration:9eec48bf
+
+# Production
+docker run -d --restart=always \
+    --sysctl net.core.somaxconn=4096 \
+    --name front-administration-3101 \
+    --publish 3101:3000 \
+    --log-driver=syslog \
+    --log-opt tag=suplbiz/front-administration-3101 \
+    -e BRANCH=master \
+    -e SERVICE_NAME=front-administration \
+    -e SERVICE_TAGS=front,urlprefix-admin.supl.biz/ \
+    -e SERVICE_CHECK_TCP=true \
+    -e SERVICE_CHECK_INTERVAL=10s \
+    -e SERVICE_CHECK_TIMEOUT=3s \
+    -e API_HOST=https://supl.biz \
+    -e SENTRY_DSN=https://a086ec65aa7e487cbec8b984b20d151d@sentry.supl.biz/13 \
+    -e SENTRY_DSN_PRIVATE=https://a086ec65aa7e487cbec8b984b20d151d:d5ac8bca9a46475c8560baf7b9d8e7e4@sentry.supl.biz/13 \
+    -v /tmp:/tmp \
+    --memory="8g" --memory-swap=0 --memory-swappiness=0 \
+    docker.supl.biz/front-administration:803e59f9
 
 
 def test_order_notifications(order_id=None):
@@ -205,71 +255,5 @@ for duplicate in duplicates:
     CategoryCityDescription.objects.filter(
         **{x: duplicate[x] for x in unique_fields}
     ).exclude(id=duplicate['max_id']).delete()
-
-#############################
-
-# CONTEXT MANAGER AS DECORATOR
-
-from contextlib import ExitStack, suppress as suppress_, ContextDecorator, \
-    AbstractContextManager
-
-
-class ImportState:
-    """Класс для определения и проставления состояния импорта"""
-
-    def __init__(self):
-        self.s = None
-
-    def set_state(self, state):
-        """Проставляет определённое состояние для импорта"""
-        self.s = state
-        print('state> ', state)
-
-
-class suppress(ContextDecorator, suppress_):
-    pass
-
-
-class ImportStateManager(ContextDecorator):
-
-    def __init__(self, state: ImportState):
-        self.state = state
-
-    def __enter__(self):
-        self.state.set_state('started')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is None:
-            self.state.set_state('finished')
-        else:
-            self.state.set_state('failed')
-
-
-class CustomException(Exception):
-    """Привет. """
-
-
-state = ImportState()
-
-
-class Handler:
-
-    @suppress(CustomException)
-    @ImportStateManager(state)
-    def handle_smth(self):
-        for i in range(10):
-            if i == 6:
-                pass
-                # raise CustomException('invalid value')
-
-
-def test():
-    Handler().handle_smth()
-
-    # with ExitStack() as stack:
-    #     stack.enter_context(suppress(CustomException))
-    #     stack.enter_context(ImportStateManager(state))
-    #     handle_smth()
-
 
 #############################

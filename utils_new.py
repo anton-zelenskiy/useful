@@ -1366,3 +1366,32 @@ def test_send_email_template():
         user_id=user.id,
     )
     do_send_activity(activity.id)
+
+
+
+def index_proposals_sandbox():
+    rubric = Rubric.objects.filter(title='Листовой прокат')
+    from project.apps.regions.utils.utils import \
+        get_models_with_ancestors_descendants
+
+    rr = get_models_with_ancestors_descendants(rubric)
+    pp = Proposal.objects.filter(rubrics__in=rr)
+
+    from project.apps.index.tasks import index_proposal
+    for p in pp:
+        index_proposal(p.id)
+
+
+def test_yml():
+    imp = YMLProposalImport.objects.filter(id=306).first()
+    yml_attachment = imp.attachments.first()
+    log = yml_attachment.yml_logs.first()
+    log.total_rows = 0
+    log.current_row = 0
+    log.import_completed = False
+    log.iteration_completed = False
+    log.save()
+    print(log.__dict__)
+
+    parser = YandexMarketParser(yml_attachment=yml_attachment, yml_log=log)
+    parser.parse()
