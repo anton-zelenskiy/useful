@@ -92,8 +92,8 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-alias django_shell='docker exec -it suplbiz-root-repo_web_1 django-admin shell_plus'
-alias proposals_shell='docker exec -it suplbiz-root-repo_backend_proposals_1 django-admin shell_plus'
+alias django_shell='docker exec -it suplbiz-root-repo_backend.monolith_1 django-admin shell_plus'
+alias proposals_shell='docker exec -it suplbiz-root-repo_backend.proposals_1 django-admin shell_plus'
 alias django_shell_print_sql='docker exec -it suplbiz-root-repo_web_1 django-admin shell_plus --print-sql'
 alias production='ssh root@supl.biz'
 alias sandbox='ssh ubuntu@sandbox.supl.biz'
@@ -108,4 +108,3 @@ alias stop_vpn='sudo killall openvpn'
 alias venv_auth='source /home/anton/suplbiz-microservices/suplbiz-authentication/venv-auth/bin/activate; export DJANGO_SETTINGS_MODULE=project.settings; export PYTHONPATH=$PWD'
 
 check_email_ () { ssh root@supl.biz "cat /var/log/mail.log | grep '$1'"; }
-
