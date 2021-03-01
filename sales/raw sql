@@ -1,0 +1,253 @@
+SELECT
+    MAX(sales_events.id) AS se_id,
+    MAX(sales_events.created_at) AS se_created_at,
+    leads.id AS lead_id,
+    leads.user_id,
+    leads.sales_productivity,
+    sales_events.type,
+    CASE
+        WHEN MAX(sales_events.created_at) >
+             (current_timestamp - interval '5' MINUTE)
+            THEN leads.sales_productivity * 10
+        WHEN MAX(sales_events.created_at) >
+             (current_timestamp - interval '15' MINUTE)
+            THEN leads.sales_productivity * 4
+        WHEN MAX(sales_events.created_at) >
+             (current_timestamp - interval '60' MINUTE)
+            THEN leads.sales_productivity * 2
+        ELSE leads.sales_productivity
+        END as dynamic_productivity
+FROM
+    sales_event AS sales_events
+        INNER JOIN sales_lead AS leads ON (sales_events.lead_id = leads.id)
+        INNER JOIN users_user AS users ON (leads.user_id = users.id)
+        LEFT JOIN (
+        SELECT
+            subscriptions.user_id,
+            MAX(subscriptions.finish_date) AS finish_date
+        FROM
+            tariffs_subscription AS subscriptions
+        GROUP BY subscriptions.user_id
+    ) AS users_subs ON (
+                users_subs.user_id = users.id OR users_subs.user_id = users.parent_id
+        )
+        INNER JOIN (
+        SELECT
+            se.lead_id, MAX(se.planned_datetime) AS planned_datetime,
+            bool_or(se.in_work) AS has_in_work
+        FROM
+            sales_event AS se
+        GROUP BY
+            se.lead_id
+    ) AS latest_se ON (latest_se.lead_id = sales_events.lead_id)
+        LEFT JOIN (
+        SELECT DISTINCT asl.lead_id
+        FROM
+            action_on_sales_lead AS asl
+        WHERE
+                asl.processed_at >= current_timestamp - interval '46' HOUR
+    ) AS recent_actions
+                  ON (leads.id = recent_actions.lead_id)
+        LEFT JOIN regions_region AS origin_regions
+                  ON ( origin_regions.id = users.origin_id )
+        LEFT JOIN (
+        SELECT supplier_leads.user_id FROM supplier_leads
+                                               INNER JOIN (
+            SELECT logs.lead_id FROM supplier_logs AS logs
+            WHERE logs.created_at
+                      >= current_timestamp - interval '46' HOUR
+        ) AS logs ON (logs.lead_id = supplier_leads.id)
+        WHERE supplier_leads.user_id IS NOT NULL
+    ) AS recent_supplier_leads ON (
+            recent_supplier_leads.user_id = users.id
+        )
+        LEFT JOIN (
+        SELECT cp_lead.user_id FROM callerspanel_lead AS cp_lead
+                                        INNER JOIN (
+            SELECT cp_leads_logs.lead_id
+            FROM callerspanel_leadactionlog AS cp_leads_logs
+            WHERE
+                    cp_leads_logs.verb IN (19, 18, 17, 14, 12) AND
+                    cp_leads_logs.created_at >
+                    current_timestamp - interval '46' HOUR
+        ) AS _in_delay_leads ON (cp_lead.id = _in_delay_leads.lead_id)
+        WHERE cp_lead.user_content_type_id=12
+    ) AS recent_customer_leads ON (recent_customer_leads.user_id = users.id)
+        LEFT JOIN users_userrubric AS u_rub
+                  ON  (u_rub.user_id = users.id)
+        LEFT JOIN rubrics_rubric AS rubrics
+                  ON (u_rub.rubric_id = rubrics.id)
+        LEFT JOIN (
+        SELECT * FROM rubrics_rubric AS rr
+        WHERE rr.id IN (1794, 1796, 1802, 1800, 1797, 1798, 1799, 3631, 1801, 9546, 1807, 1809, 1815, 1808, 1805, 1810, 1811, 1812, 1813, 1806, 1804, 9897, 9709, 1814, 9928, 1816, 1803, 1817, 1818, 1819)
+    ) AS settings_rubrics
+                  ON (
+                              rubrics.tree_id = settings_rubrics.tree_id
+                          AND rubrics.lft >= settings_rubrics.lft
+                          AND rubrics.rght <= settings_rubrics.rght
+                      )
+        LEFT JOIN (
+        SELECT * FROM rubrics_rubric AS rr
+        WHERE rr.id IN (1794, 1796, 1802, 1800, 1797, 1798, 1799, 3631, 1801, 9546, 1807, 1809, 1815, 1808, 1805, 1810, 1811, 1812, 1813, 1806, 1804, 9897, 9709, 1814, 9928, 1816, 1803, 1817, 1818, 1819)
+    ) AS raw_settings_rubrics
+                  ON (
+                              rubrics.tree_id = raw_settings_rubrics.tree_id
+                          AND rubrics.lft >= raw_settings_rubrics.lft
+                          AND rubrics.rght <= raw_settings_rubrics.rght
+                      )
+WHERE (
+        (
+                false AND users_subs.finish_date > current_date - interval '30' DAY
+            ) OR (
+                false AND users_subs.finish_date < current_date - interval '30' DAY
+            ) OR (
+                true AND users_subs.finish_date IS NULL
+            )
+    )
+  AND (
+            latest_se.planned_datetime <= current_timestamp
+        AND latest_se.has_in_work = FALSE
+    )
+  AND (
+    recent_actions.lead_id IS NULL
+    )
+  AND ((
+               (
+                       false AND origin_regions.id IS NULL
+                   ) OR (
+                       (
+                               leads.caller_id IS NULL
+                               AND origin_regions.tree_id IN (17)
+                           ) OR (
+                                   leads.caller_id = 1650223
+                               AND origin_regions.tree_id IN (17)
+                           )
+                   )
+           ) AND (
+               (
+                       false AND origin_regions.id IS NULL
+                   ) OR (
+                       origin_regions.utc_offset IN (1, 2, 3, 4, 5, 6)
+                   )
+           ))
+  AND (
+    recent_supplier_leads.user_id IS NULL
+    )
+  AND (
+    recent_customer_leads.user_id IS NULL
+    )
+  AND (
+    (
+            (
+                    leads.caller_id IS NULL
+                    AND raw_settings_rubrics.tree_id IS NOT NULL
+                ) OR (
+                        leads.caller_id = 1650223
+                    AND settings_rubrics.tree_id IS NOT NULL
+                )
+        )
+    )
+  AND (
+    (
+            (
+                    leads.caller_id IS NULL
+                    AND leads.status IN (0, 1, 2, 3, 4)
+                ) OR (
+                        leads.caller_id = 1650223
+                    AND leads.status IN (0, 1, 2, 3, 4)
+                )
+        )
+    )
+  AND (
+    (
+            (
+                    leads.caller_id IS NULL
+                    AND leads.sales_productivity
+                        BETWEEN 0
+                        AND 10
+                ) OR (
+                        leads.caller_id = 1650223
+                    AND leads.sales_productivity
+                            BETWEEN 0
+                            AND 99999999
+                )
+        )
+    )
+  AND (
+        (
+                false
+                OR (users.phone IS NOT NULL AND users.phone <> '')
+            )
+        AND (
+                false
+                OR (
+                            users.sales_orders_count_desc >= 1
+                        AND users.sales_orders_count_desc <= 100000000
+                        AND u_rub.rubric_id IS NOT NULL
+                    )
+            )
+        AND (
+                NOT false OR users.parent_id IS NULL
+            )
+        AND (
+                (
+                        leads.caller_id IS NULL
+                        AND sales_events.created_at <=
+                            current_timestamp - interval '120' MINUTE
+                    ) OR (
+                            leads.caller_id = 1650223
+                        AND sales_events.created_at <=
+                            current_timestamp - interval '15'
+                                MINUTE
+                    )
+            )
+    )
+  AND (
+    (
+            (
+                    leads.caller_id IS NULL
+                    AND sales_events.type IN (2, 3, 6, 7, 12, 4, 21, 22, 23, 36, 37, 19, 34, 35, 1, 40, 13, 39, 20, 5, 9, 25)
+                    AND (
+                        (
+                                    sales_events.type != 9
+                                OR (
+                                                sales_events.type = 9
+                                            AND sales_events.type_info IS NOT NULL
+                                            AND (sales_events.type_info->>'viewed_order_count')::int > 10
+                                        )
+                            )
+                        )
+                    AND (
+                        (
+                                    sales_events.type != 5
+                                OR (
+                                                sales_events.type = 5
+                                            AND sales_events.target_type_id = 24
+                                            AND sales_events.target_id IN (2, 5, 25, 26, 38, 41, 46, 91, 93, 96, 129, 186, 188, 190, 233, 245, 255, 256, 259)
+                                        )
+                            )
+                        )
+                ) OR (
+                        leads.caller_id = 1650223
+                    AND sales_events.type IN (2, 3, 6, 7, 12, 4, 19, 21, 34, 35, 22, 23, 13, 36, 37, 1, 40, 25, 5, 39, 20)
+                    AND (true)
+                    AND (
+                            (
+                                        sales_events.type != 5
+                                    OR (
+                                                    sales_events.type = 5
+                                                AND sales_events.target_type_id = 24
+                                                AND sales_events.target_id IN (2, 5, 25, 26, 38, 41, 46, 91, 93, 96, 129, 186, 188, 190, 233, 245, 255, 256, 259)
+                                            )
+                                )
+                            )
+                )
+        )
+    )
+GROUP BY
+    leads.user_id,
+    leads.id,
+    sales_events.type,
+    leads.sales_productivity
+ORDER BY dynamic_productivity DESC NULLS LAST
+LIMIT 150

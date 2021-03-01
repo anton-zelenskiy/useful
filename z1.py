@@ -1,100 +1,3 @@
-def lead_duration(user_id, caller_id=None):
-    from django.db.models import Sum
-    lead = SalesLead.objects.get(user_id=user_id)
-
-    logs = ActionOnSalesLead.objects.filter(
-        lead=lead,
-        caller=caller_id or lead.caller
-    )
-
-    for log in logs:
-        print(log.created_at, log.caller.name, log.duration)
-
-    return logs.aggregate(duration=Sum('duration'))['duration']
-
-
-print(lead_duration(user_id=1307620))
-
-
-def get_calls_duration_per_period_filters():
-    """
-    Фильтры для продолжительности звонков за определённый период
-
-    `month_gt` - последний звонок лиду более `month_gt` месяцев назад
-    `duration_lt` - суммарная длительность звонков меньше `duration_lt`
-    """
-    FilterInfo = namedtuple(
-        'FilterInfo',
-        ['month_gt', 'duration_lt']
-    )
-    return [
-        FilterInfo(month_gt=0, duration_lt=3),
-        FilterInfo(month_gt=1, duration_lt=4),
-        FilterInfo(month_gt=2, duration_lt=5),
-        FilterInfo(month_gt=3, duration_lt=12),
-        FilterInfo(month_gt=4, duration_lt=22),
-        FilterInfo(month_gt=5, duration_lt=42),
-        FilterInfo(month_gt=6, duration_lt=62),
-    ]
-
-
-def get_months_ago(amount: int):
-    """
-    Возвращает дату, количество 'amount' месяцев назад
-    """
-    now = timezone.now()
-    if amount is None:
-        return now
-
-    days = amount * 30
-
-    if days:
-        days = days - 1
-    return now - timezone.timedelta(days=days)
-
-
-def check_lead_reset(user_id):
-    lead = SalesLead.objects.get(user_id=user_id)
-
-    logs = ActionOnSalesLead.objects.order_by('-processed_at').filter(
-        lead=lead,
-        caller=lead.caller
-    )
-
-    last_processed_call = logs.first()
-    last_call_dt = last_processed_call.processed_at
-    all_duration = logs.aggregate(duration=Sum('duration'))['duration']
-
-    print(last_call_dt)
-    print(all_duration)
-
-    for filter_info in get_calls_duration_per_period_filters():
-        # print(filter_info.month_gt, filter_info.duration_lt)
-        date = get_months_ago(filter_info.month_gt)
-
-        dt_diff = (date - last_call_dt).days
-
-        print(date, dt_diff, filter_info.duration_lt)
-
-
-leads = SalesLead.objects.filter(caller__isnull=False).annotate(
-    sum_duration=Sum(
-        Case(
-            When(
-                actiononsalesleads__caller=F('caller'),
-                then=F('actiononsalesleads__duration')
-            ),
-            default=Value(0),
-            output_field=IntegerField(),
-        )
-    ),
-    last_se_processed_at=Coalesce(
-        Max('actiononsalesleads__processed_at'),
-        Value(timezone.now() - timezone.timedelta(days=30*7))
-    )
-).filter(sum_duration__gt=62)
-
-
 def months_between_two_dates():
     """Месяцев между датами"""
     from datetime import datetime
@@ -104,7 +7,6 @@ def months_between_two_dates():
     date2 = datetime.strptime(str('2019-07-22'), '%Y-%m-%d')
     relative_delta = relativedelta.relativedelta(date2, date1)
     return relative_delta.years * 12 + relative_delta.months
-
 
 
 def nltk_experiments():

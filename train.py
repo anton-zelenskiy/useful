@@ -69,7 +69,9 @@ def quicksort(arr):
 
         return quicksort(less) + [pivot] + quicksort(greater)
 
+
 quicksort([10,4,2,6,9,3,6,1])
+
 
 a = [5,2,4,6,1,3]
 def insert_sort(array):
@@ -83,3 +85,46 @@ def insert_sort(array):
 
     return array
 insert_sort(a)
+
+
+# binary search
+import random
+arr = sorted([random.randint(0, 100) for i in range(20)])
+
+print(arr)
+def bin_search(array, x):
+    low = 0
+    high = len(array) - 1
+
+    while low <= high:
+        mid = (low + high) // 2
+
+        guess = array[mid]
+        if guess == x:
+            return mid
+
+        if guess > x:
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return None
+
+
+def bin_search_rec(array, x, l=0, h=None):
+    if h is None:
+        h = len(array) - 1
+
+    if l > h:
+        return None
+
+    mid = (l + h) // 2
+
+    guess = array[mid]
+    if guess == x:
+        return mid
+
+    if guess > x:
+        return bin_search_rec(array, x, l, mid - 1)
+    else:
+        return bin_search_rec(array, x, mid + 1, h)
