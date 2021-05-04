@@ -34,6 +34,10 @@ select sum(unique_imps) as sum_unique_imps, sum(clicks) as sum_clicks, sum(impre
 """
 
 
+# TODO:
+#  Change eventbrite -> eventbrite_sales на стороне clickhouse поменять имена таблиц этого провайдера.
+#  Заменить dsas_name на db_name. Так же нужно переименовать fdw вьюху
+
 def get_metrics():
     for provider_iname, provider_id, report in (
         ('getintent', 45, 'creatives'),
@@ -54,7 +58,7 @@ def get_metrics():
         ('branch_tune', 450, 'keywords'),
         ('branch_tune', 450, 'campaign'),
         ('branch_tune', 450, 'sub_sites_campaign'),
-        ('eventbrite_sales', 451, 'eventbrite_sales'),  # ???
+        ('eventbrite', 451, 'eventbrite_sales'),  # ???
         ('act_on', 462, 'message_report'),
         ('act_on', 462, 'optout_list'),
         ('act_on', 462, 'daily_message'),
@@ -83,7 +87,7 @@ def get_metrics():
 
 
 # [(agency_id, provider_db_name, report_type, metrics)]
-TEST_SAFE = [
+SAFE_REPORTS = [
     (1, 'getintent', 'creatives', ["clicks", "unique_imps", "spent", "impression"]),
     (3256, 'getintent', 'creatives', ["clicks", "unique_imps", "spent", "impression"]),
 
@@ -163,7 +167,7 @@ TEST_SAFE = [
     (102, 'branch_tune', 'sub_sites_my_campaign',
      ["installs", "conv", "visits", "events", "enrollments", "payouts", "revenues_usd", "gross_clicks"]),
 
-    (1, 'eventbrite_sales', 'eventbrite_sales', ["total_tickets_amount", "quantity_of_sold_tickets"]),
+    (1, 'eventbrite', 'eventbrite_sales', ["total_tickets_amount", "quantity_of_sold_tickets"]),
 
     (3675, 'tune_affiliate', 'offers', ["stat_clicks", "stat_impressions", "stat_payout", "stat_conversions"]),
     (3256, 'tune_affiliate', 'offers', ["stat_clicks", "stat_impressions", "stat_payout", "stat_conversions"]),
@@ -191,30 +195,7 @@ TEST_SAFE = [
 ]
 
 
-def test():
-    for agency_id, provider_name, report_type, metrics in TEST_SAFE:
-        print(agency_id, provider_name, report_type, metrics)
-        print(create_totals_sql(report_type, agency_id, provider_name, metrics))
-        print('\n\n')
-
-
-def create_totals_sql(report_type, agency_id, provider, metrics):
-    table_name = '{0}_{1}_{2}_table'.format(report_type, agency_id, provider)
-    metrics_str = ', '.join(['sum({0}) as sum_{0}'.format(m) for m in metrics])
-
-    return "select %s from %s" % (metrics_str, table_name)
-
-
-"""
-getintent:
-creatives 11:00 - 12:00
-
-apple_search
-adsets 
-"""
-
-
-TEST_DANGER_ = [
+DANGER_REPORTS = [
     (3710, 'getintent', 'creatives', ['clicks', 'unique_imps', 'spent', 'impression']),
     (1570, 'getintent', 'creatives', ['clicks', 'unique_imps', 'spent', 'impression']),
     (1, 'getintent', 'creatives', ['clicks', 'unique_imps', 'spent', 'impression']),
@@ -347,10 +328,10 @@ TEST_DANGER_ = [
     ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd']), (
     102, 'branch_tune', 'sub_sites_my_campaign',
     ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd', 'gross_clicks']),
-    (5710, 'eventbrite_sales', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
-    (5629, 'eventbrite_sales', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
-    (3927, 'eventbrite_sales', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
-    (1, 'eventbrite_sales', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']), (
+    (5710, 'eventbrite', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
+    (5629, 'eventbrite', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
+    (3927, 'eventbrite', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']),
+    (1, 'eventbrite', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets']), (
     3916, 'act_on', 'message_report',
     ['sent', 'delivered', 'bounced', 'hard_bounced', 'soft_bounced', 'notopened', 'optout', 'last_open',
      'last_clicks', 'last_open_ts', 'rebroad_cast', 'rebroad_cast_click', 'clicked', 'unuqie_clicked',
@@ -377,9 +358,24 @@ TEST_DANGER_ = [
     ['conversions', 'potential_impressions', 'lost_is_rank', 'cost', 'impressions', 'revenue', 'clicks'])
 ]
 
+
+def test():
+    for agency_id, provider_name, report_type, metrics in DANGER_REPORTS:
+        print(agency_id, provider_name, report_type, metrics)
+        print(create_totals_sql(report_type, agency_id, provider_name, metrics))
+        print('\n\n')
+
+
+def create_totals_sql(report_type, agency_id, provider, metrics):
+    table_name = '{0}_{1}_{2}_table'.format(report_type, agency_id, provider)
+    metrics_str = ', '.join(['sum({0}) as sum_{0}'.format(m) for m in metrics])
+
+    return "select %s from %s" % (metrics_str, table_name)
+
+
 metrics_map = {
     ('apple_search', 'keywords'): ['conv', 'imps', 'taps', 'cpt_bid', 'spend'],
-    ('eventbrite_sales', 'eventbrite_sales'): ['total_tickets_amount', 'quantity_of_sold_tickets'],
+    ('eventbrite', 'eventbrite_sales'): ['total_tickets_amount', 'quantity_of_sold_tickets'],
     ('getcake', 'sub_affiliate'): ['clicks', 'conversions', 'events', 'impressions', 'lite_clicks', 'revenue',
                                    'total_lite_clicks'],
     ('yahoo_gemini', 'geo'): ['impressions', 'clicks', 'conv', 'total_conversions', 'spend', 'follows', 'engagements',
@@ -457,7 +453,7 @@ pp = (
     ('branch_tune', 450, 'keywords'),
     ('branch_tune', 450, 'campaign'),
     ('branch_tune', 450, 'sub_sites_campaign'),
-    ('eventbrite_sales', 451, 'eventbrite_sales'),  # ???
+    ('eventbrite', 451, 'eventbrite_sales'),  # ???
     ('act_on', 462, 'message_report'),
     ('act_on', 462, 'optout_list'),
     ('act_on', 462, 'daily_message'),
