@@ -360,7 +360,7 @@ DANGER_REPORTS = [
 
 
 def test():
-    for agency_id, provider_name, report_type, metrics in DANGER_REPORTS:
+    for agency_id, provider_name, report_type, metrics in SAFE_REPORTS:
         print(agency_id, provider_name, report_type, metrics)
         print(create_totals_sql(report_type, agency_id, provider_name, metrics))
         print('\n\n')
@@ -469,3 +469,188 @@ pp = (
 )
 
 provider_map = {i[0]: i[1] for i in pp}
+
+
+
+"""
+
+(1, 'getintent', 'creatives', ['clicks', 'unique_imps', 'spent', 'impression'])
+select sum(clicks) as sum_clicks, sum(unique_imps) as sum_unique_imps, sum(spent) as sum_spent, sum(impression) as sum_impression from creatives_1_getintent_table
+totals: 834,550.00	309,652,846.00	12,140,249.09	498,567,636.00
+command: migrate_report_etl_to_rtbm --provider 45 --report-type creatives --agency 1
+
+
+
+
+
+(3256, 'getintent', 'creatives', ['clicks', 'unique_imps', 'spent', 'impression'])
+select sum(clicks) as sum_clicks, sum(unique_imps) as sum_unique_imps, sum(spent) as sum_spent, sum(impression) as sum_impression from creatives_3256_getintent_table
+
+(102, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_102_apple_search_table
+
+(3202, 'apple_search', 'searchterms', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from searchterms_3202_apple_search_table
+
+(5717, 'apple_search', 'adsets_geo', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_geo_5717_apple_search_table
+
+(3937, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_3937_apple_search_table
+
+(3937, 'apple_search', 'adsets_device', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_device_3937_apple_search_table
+
+(3937, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_3937_apple_search_table
+
+(3937, 'apple_search', 'adsets_geo', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_geo_3937_apple_search_table
+
+(3842, 'apple_search', 'searchterms', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from searchterms_3842_apple_search_table
+
+(3842, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_3842_apple_search_table
+
+(3842, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_3842_apple_search_table
+
+(5571, 'apple_search', 'adsets_geo', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_geo_5571_apple_search_table
+
+(5571, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_5571_apple_search_table
+
+(5571, 'apple_search', 'adsets_device', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_device_5571_apple_search_table
+
+(5571, 'apple_search', 'searchterms', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from searchterms_5571_apple_search_table
+
+(5571, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_5571_apple_search_table
+
+(1, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_1_apple_search_table
+
+(4424, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_4424_apple_search_table
+
+(4424, 'apple_search', 'adsets_device', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_device_4424_apple_search_table
+
+(4424, 'apple_search', 'adsets_geo', ['imps', 'conv', 'spend', 'taps'])
+select sum(imps) as sum_imps, sum(conv) as sum_conv, sum(spend) as sum_spend, sum(taps) as sum_taps from adsets_geo_4424_apple_search_table
+
+(4424, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_4424_apple_search_table
+
+(1623, 'apple_search', 'adsets', ['conv', 'imps', 'taps', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(spend) as sum_spend from adsets_1623_apple_search_table
+
+(1623, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_1623_apple_search_table
+
+(102, 'apple_search', 'keywords', ['conv', 'imps', 'taps', 'cpt_bid', 'spend'])
+select sum(conv) as sum_conv, sum(imps) as sum_imps, sum(taps) as sum_taps, sum(cpt_bid) as sum_cpt_bid, sum(spend) as sum_spend from keywords_102_apple_search_table
+
+(5571, 'awin', 'creatives', ['bonus_comm', 'bonus_no', 'bonus_value', 'clicks', 'confirmed_comm', 'confirmed_no', 'confirmed_value', 'declined_comm', 'declined_no', 'declined_value', 'impressions', 'pending_comm', 'pending_no', 'pending_value', 'total_comm', 'total_no', 'total_value'])
+select sum(bonus_comm) as sum_bonus_comm, sum(bonus_no) as sum_bonus_no, sum(bonus_value) as sum_bonus_value, sum(clicks) as sum_clicks, sum(confirmed_comm) as sum_confirmed_comm, sum(confirmed_no) as sum_confirmed_no, sum(confirmed_value) as sum_confirmed_value, sum(declined_comm) as sum_declined_comm, sum(declined_no) as sum_declined_no, sum(declined_value) as sum_declined_value, sum(impressions) as sum_impressions, sum(pending_comm) as sum_pending_comm, sum(pending_no) as sum_pending_no, sum(pending_value) as sum_pending_value, sum(total_comm) as sum_total_comm, sum(total_no) as sum_total_no, sum(total_value) as sum_total_value from creatives_5571_awin_table
+
+(5571, 'awin', 'publisher', ['impressions', 'clicks', 'pending_no', 'pending_value', 'pending_comm', 'confirmed_no', 'confirmed_value', 'confirmed_comm', 'bonus_no', 'bonus_value', 'bonus_comm', 'total_no', 'total_value', 'total_comm', 'declined_no', 'declined_value', 'declined_comm'])
+select sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(pending_no) as sum_pending_no, sum(pending_value) as sum_pending_value, sum(pending_comm) as sum_pending_comm, sum(confirmed_no) as sum_confirmed_no, sum(confirmed_value) as sum_confirmed_value, sum(confirmed_comm) as sum_confirmed_comm, sum(bonus_no) as sum_bonus_no, sum(bonus_value) as sum_bonus_value, sum(bonus_comm) as sum_bonus_comm, sum(total_no) as sum_total_no, sum(total_value) as sum_total_value, sum(total_comm) as sum_total_comm, sum(declined_no) as sum_declined_no, sum(declined_value) as sum_declined_value, sum(declined_comm) as sum_declined_comm from publisher_5571_awin_table
+
+(5571, 'awin', 'transactions', ['commission_amount', 'sale_amount'])
+select sum(commission_amount) as sum_commission_amount, sum(sale_amount) as sum_sale_amount from transactions_5571_awin_table
+
+(3675, 'getcake', 'conversions', ['price'])
+select sum(price) as sum_price from conversions_3675_getcake_table
+
+(3675, 'getcake', 'sub_affiliate', ['clicks', 'conversions', 'events', 'impressions', 'lite_clicks', 'revenue', 'total_lite_clicks'])
+select sum(clicks) as sum_clicks, sum(conversions) as sum_conversions, sum(events) as sum_events, sum(impressions) as sum_impressions, sum(lite_clicks) as sum_lite_clicks, sum(revenue) as sum_revenue, sum(total_lite_clicks) as sum_total_lite_clicks from sub_affiliate_3675_getcake_table
+
+(3675, 'getcake', 'campaign', ['impressions', 'clicks', 'conversions', 'revenue', 'events', 'price', 'lite_clicks', 'total_lite_clicks'])
+select sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(conversions) as sum_conversions, sum(revenue) as sum_revenue, sum(events) as sum_events, sum(price) as sum_price, sum(lite_clicks) as sum_lite_clicks, sum(total_lite_clicks) as sum_total_lite_clicks from campaign_3675_getcake_table
+
+(1, 'getcake', 'campaign', ['impressions', 'clicks', 'conversions', 'revenue', 'events', 'price', 'lite_clicks', 'total_lite_clicks'])
+select sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(conversions) as sum_conversions, sum(revenue) as sum_revenue, sum(events) as sum_events, sum(price) as sum_price, sum(lite_clicks) as sum_lite_clicks, sum(total_lite_clicks) as sum_total_lite_clicks from campaign_1_getcake_table
+
+(1, 'getcake', 'sub_affiliate', ['clicks', 'conversions', 'events', 'impressions', 'lite_clicks', 'revenue', 'total_lite_clicks'])
+select sum(clicks) as sum_clicks, sum(conversions) as sum_conversions, sum(events) as sum_events, sum(impressions) as sum_impressions, sum(lite_clicks) as sum_lite_clicks, sum(revenue) as sum_revenue, sum(total_lite_clicks) as sum_total_lite_clicks from sub_affiliate_1_getcake_table
+
+(1, 'getcake', 'conversions', ['price'])
+select sum(price) as sum_price from conversions_1_getcake_table
+
+(3202, 'branch_tune', 'sub_sites_devices', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_devices_3202_branch_tune_table
+
+(3202, 'branch_tune', 'sub_sites_my_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd', 'gross_clicks'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(gross_clicks) as sum_gross_clicks from sub_sites_my_campaign_3202_branch_tune_table
+
+(3202, 'branch_tune', 'keywords', ['installs', 'conv', 'visits', 'events', 'enrollments'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments from keywords_3202_branch_tune_table
+
+(3202, 'branch_tune', 'campaign', ['installs', 'events', 'payouts', 'revenues_usd', 'ad_clicks', 'ad_clicks_unique', 'ad_impressions', 'ad_impressions_unique', 'opens', 'purchase', 'updates'])
+select sum(installs) as sum_installs, sum(events) as sum_events, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(ad_clicks) as sum_ad_clicks, sum(ad_clicks_unique) as sum_ad_clicks_unique, sum(ad_impressions) as sum_ad_impressions, sum(ad_impressions_unique) as sum_ad_impressions_unique, sum(opens) as sum_opens, sum(purchase) as sum_purchase, sum(updates) as sum_updates from campaign_3202_branch_tune_table
+
+(3202, 'branch_tune', 'sub_sites_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_campaign_3202_branch_tune_table
+
+(1623, 'branch_tune', 'sub_sites_devices', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_devices_1623_branch_tune_table
+
+(1623, 'branch_tune', 'campaign', ['installs', 'events', 'payouts', 'revenues_usd', 'ad_clicks', 'ad_clicks_unique', 'ad_impressions', 'ad_impressions_unique', 'opens', 'purchase', 'updates'])
+select sum(installs) as sum_installs, sum(events) as sum_events, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(ad_clicks) as sum_ad_clicks, sum(ad_clicks_unique) as sum_ad_clicks_unique, sum(ad_impressions) as sum_ad_impressions, sum(ad_impressions_unique) as sum_ad_impressions_unique, sum(opens) as sum_opens, sum(purchase) as sum_purchase, sum(updates) as sum_updates from campaign_1623_branch_tune_table
+
+(1623, 'branch_tune', 'sub_sites_my_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd', 'gross_clicks'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(gross_clicks) as sum_gross_clicks from sub_sites_my_campaign_1623_branch_tune_table
+
+(1623, 'branch_tune', 'keywords', ['installs', 'conv', 'visits', 'events', 'enrollments'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments from keywords_1623_branch_tune_table
+
+(1623, 'branch_tune', 'sub_sites_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_campaign_1623_branch_tune_table
+
+(102, 'branch_tune', 'campaign', ['installs', 'events', 'payouts', 'revenues_usd', 'ad_clicks', 'ad_clicks_unique', 'ad_impressions', 'ad_impressions_unique', 'opens', 'purchase', 'updates'])
+select sum(installs) as sum_installs, sum(events) as sum_events, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(ad_clicks) as sum_ad_clicks, sum(ad_clicks_unique) as sum_ad_clicks_unique, sum(ad_impressions) as sum_ad_impressions, sum(ad_impressions_unique) as sum_ad_impressions_unique, sum(opens) as sum_opens, sum(purchase) as sum_purchase, sum(updates) as sum_updates from campaign_102_branch_tune_table
+
+(102, 'branch_tune', 'keywords', ['installs', 'conv', 'visits', 'events', 'enrollments'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments from keywords_102_branch_tune_table
+
+(102, 'branch_tune', 'sub_sites_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_campaign_102_branch_tune_table
+
+(102, 'branch_tune', 'sub_sites_devices', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd from sub_sites_devices_102_branch_tune_table
+
+(102, 'branch_tune', 'sub_sites_my_campaign', ['installs', 'conv', 'visits', 'events', 'enrollments', 'payouts', 'revenues_usd', 'gross_clicks'])
+select sum(installs) as sum_installs, sum(conv) as sum_conv, sum(visits) as sum_visits, sum(events) as sum_events, sum(enrollments) as sum_enrollments, sum(payouts) as sum_payouts, sum(revenues_usd) as sum_revenues_usd, sum(gross_clicks) as sum_gross_clicks from sub_sites_my_campaign_102_branch_tune_table
+
+(1, 'eventbrite', 'eventbrite_sales', ['total_tickets_amount', 'quantity_of_sold_tickets'])
+select sum(total_tickets_amount) as sum_total_tickets_amount, sum(quantity_of_sold_tickets) as sum_quantity_of_sold_tickets from eventbrite_sales_1_eventbrite_table
+
+(3675, 'tune_affiliate', 'offers', ['stat_clicks', 'stat_impressions', 'stat_payout', 'stat_conversions'])
+select sum(stat_clicks) as sum_stat_clicks, sum(stat_impressions) as sum_stat_impressions, sum(stat_payout) as sum_stat_payout, sum(stat_conversions) as sum_stat_conversions from offers_3675_tune_affiliate_table
+
+(3256, 'tune_affiliate', 'offers', ['stat_clicks', 'stat_impressions', 'stat_payout', 'stat_conversions'])
+select sum(stat_clicks) as sum_stat_clicks, sum(stat_impressions) as sum_stat_impressions, sum(stat_payout) as sum_stat_payout, sum(stat_conversions) as sum_stat_conversions from offers_3256_tune_affiliate_table
+
+(3368, 'advangelists', 'banners', ['impressions', 'conversions', 'completes', 'spend', 'clicks'])
+select sum(impressions) as sum_impressions, sum(conversions) as sum_conversions, sum(completes) as sum_completes, sum(spend) as sum_spend, sum(clicks) as sum_clicks from banners_3368_advangelists_table
+
+(4439, 'advangelists', 'banners', ['impressions', 'conversions', 'completes', 'spend', 'clicks'])
+select sum(impressions) as sum_impressions, sum(conversions) as sum_conversions, sum(completes) as sum_completes, sum(spend) as sum_spend, sum(clicks) as sum_clicks from banners_4439_advangelists_table
+
+(102, 'kenshoo_api_v3', 'custom_campaign_by_device', ['cost', 'validated_leads_revenue', 'm_install_revenue', 'appointment_revenue', 'purchase_revenue', 'online_aisle_revenue', 'orders_revenue', 'server_download_revenue', 'mobile_download_revenue', 'ecommerce_purchase_revenue', 'forrester_lead_revenue', 'subscription_revenue', 'impressions', 'clicks', 'revenue', 'conversions', 'conversions_revenue', 'd_v_start', 'd_enroll', 'm_install', 'appointment', 'online_aisle', 'orders', 'purchase', 'server_download', 'mobile_download', 'ecommerce_purchase', 'forrester_lead', 'subscription', 'validated_leads', 'cloud_dbaas', 'cloud_dbaas_revenue', 'white_pages', 'white_pages_revenue'])
+select sum(cost) as sum_cost, sum(validated_leads_revenue) as sum_validated_leads_revenue, sum(m_install_revenue) as sum_m_install_revenue, sum(appointment_revenue) as sum_appointment_revenue, sum(purchase_revenue) as sum_purchase_revenue, sum(online_aisle_revenue) as sum_online_aisle_revenue, sum(orders_revenue) as sum_orders_revenue, sum(server_download_revenue) as sum_server_download_revenue, sum(mobile_download_revenue) as sum_mobile_download_revenue, sum(ecommerce_purchase_revenue) as sum_ecommerce_purchase_revenue, sum(forrester_lead_revenue) as sum_forrester_lead_revenue, sum(subscription_revenue) as sum_subscription_revenue, sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(revenue) as sum_revenue, sum(conversions) as sum_conversions, sum(conversions_revenue) as sum_conversions_revenue, sum(d_v_start) as sum_d_v_start, sum(d_enroll) as sum_d_enroll, sum(m_install) as sum_m_install, sum(appointment) as sum_appointment, sum(online_aisle) as sum_online_aisle, sum(orders) as sum_orders, sum(purchase) as sum_purchase, sum(server_download) as sum_server_download, sum(mobile_download) as sum_mobile_download, sum(ecommerce_purchase) as sum_ecommerce_purchase, sum(forrester_lead) as sum_forrester_lead, sum(subscription) as sum_subscription, sum(validated_leads) as sum_validated_leads, sum(cloud_dbaas) as sum_cloud_dbaas, sum(cloud_dbaas_revenue) as sum_cloud_dbaas_revenue, sum(white_pages) as sum_white_pages, sum(white_pages_revenue) as sum_white_pages_revenue from custom_campaign_by_device_102_kenshoo_api_v3_table
+
+(102, 'kenshoo_api_v3', 'keywords_by_device', ['conversions', 'potential_impressions', 'lost_is_rank', 'cost', 'impressions', 'revenue', 'clicks'])
+select sum(conversions) as sum_conversions, sum(potential_impressions) as sum_potential_impressions, sum(lost_is_rank) as sum_lost_is_rank, sum(cost) as sum_cost, sum(impressions) as sum_impressions, sum(revenue) as sum_revenue, sum(clicks) as sum_clicks from keywords_by_device_102_kenshoo_api_v3_table
+
+(3641, 'yahoo_gemini', 'conversions', ['post_view_conversions', 'post_click_conversions', 'conversions', 'post_click_conversion_value', 'post_view_conversion_value'])
+select sum(post_view_conversions) as sum_post_view_conversions, sum(post_click_conversions) as sum_post_click_conversions, sum(conversions) as sum_conversions, sum(post_click_conversion_value) as sum_post_click_conversion_value, sum(post_view_conversion_value) as sum_post_view_conversion_value from conversions_3641_yahoo_gemini_table
+
+(3651, 'yahoo_gemini', 'geo', ['impressions', 'clicks', 'conv', 'total_conversions', 'spend', 'follows', 'engagements', 'likes', 'video_views', 'video_starts', 'video_closed', 'video_skipped'])
+select sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(conv) as sum_conv, sum(total_conversions) as sum_total_conversions, sum(spend) as sum_spend, sum(follows) as sum_follows, sum(engagements) as sum_engagements, sum(likes) as sum_likes, sum(video_views) as sum_video_views, sum(video_starts) as sum_video_starts, sum(video_closed) as sum_video_closed, sum(video_skipped) as sum_video_skipped from geo_3651_yahoo_gemini_table
+"""
