@@ -802,3 +802,134 @@ command: ./manage.py migrate_report_etl_to_rtbm --provider 71 --report-type conv
 (3651, 'yahoo_gemini', 'geo', ['impressions', 'clicks', 'conv', 'total_conversions', 'spend', 'follows', 'engagements', 'likes', 'video_views', 'video_starts', 'video_closed', 'video_skipped'])
 select sum(impressions) as sum_impressions, sum(clicks) as sum_clicks, sum(conv) as sum_conv, sum(total_conversions) as sum_total_conversions, sum(spend) as sum_spend, sum(follows) as sum_follows, sum(engagements) as sum_engagements, sum(likes) as sum_likes, sum(video_views) as sum_video_views, sum(video_starts) as sum_video_starts, sum(video_closed) as sum_video_closed, sum(video_skipped) as sum_video_skipped from geo_3651_yahoo_gemini_table
 """
+
+
+import dataclasses
+from typing import Dict, Union, List, Optional, Any
+
+import requests
+from django.conf import settings
+from requests.auth import HTTPBasicAuth
+
+import integrations.jobs.common_tasks.stages_impl as impl
+from core.priorities import Priority
+from integrations import structures as struct
+from integrations.jobs.common_tasks.metadata import get_csv_to_report_fields
+from integrations.jobs.common_tasks.run_postprocessing import run_postprocessing_task
+from integrations.jobs.common_tasks.send_meta_to_rtbmedia import send_meta_to_rtbmedia_task
+from integrations.structures import ClickhouseStorageItem
+from jobprocessor import queues
+from jobs import exceptions
+from jobs.exceptions import RetryJobStageError
+from jobs.managers import JobHandler
+from jobs.registry import mark_as_job, mark_as_task
+from jobs.registry.stage import StageContext
+from jobs.statsd import get_statsd
+from .stages.extract_data import ExtractReportFromSpreadsheet
+from .stages.transform_load import ExtractFromS3
+from .stages.upload_data import TaskUploadEmailToS3
+from .structures import SpreadsheetParams
+from integrations.jobs.email.load_data_to_pg import load_data_to_pg
+
+statsd = get_statsd()
+
+
+@mark_as_job()
+def extract_from_spreadsheet(
+    spreadsheet_params: Dict[str, Any],
+    s3_credentials: struct.S3Credentials,
+    agency_params: Union[struct.AgencyParams, Dict[str, str]],
+    extract_from_s3_params: ExtractFromS3Params,
+    load_to: Union[Dict[str, Any]],
+    transformations: List[Dict[str, Any]],
+    attachment_parsing_params: Union[AttachmentParsingParams, Dict[str, Any]],
+    send_meta_to_rtbmedia: Optional[bool] = False,
+    run_postprocessing: Optional[bool] = False,
+) -> JobHandler:
+    if not dataclasses.is_dataclass(agency_params):
+        agency_params = struct.AgencyParams(**agency_params)
+
+    job = JobHandler('extract_from_spreadsheet')
+    job.labels = {
+        'type': 'extract',
+        'transport': 'spreadsheet',
+        'agency': agency_params.uuid,
+        'report_type': extract_from_s3_params.report_type,
+        'data_source': extract_from_s3_params.data_source,
+    }
+    s3_credentials_arg = job.add_argument('s3_credentials', s3_credentials)
+
+    agency_params_arg = job.add_argument('agency_params', agency_params)
+    transformation_arg = job.add_argument('transformations', transformations)
+    spreadsheet_params_arg = job.add_argument('spreadsheet_params', spreadsheet_params)
+    attachment_parsing_params_arg = job.add_argument('attachment_parsing_params', attachment_parsing_params)
+
+    extract_report_stage = job.add_stage(
+        ExtractReportFromSpreadsheet,
+        args_from=[
+            spreadsheet_params_arg,
+            s3_credentials_arg,
+        ],
+        queue=queues.QUEUE_TASK_DOWNLOADS
+    )
+
+    extract_from_s3_params_arg = job.add_argument('extract_from_s3_params', extract_from_s3_params)
+    load_to_arg = job.add_argument('load_to', load_to)
+    destination = struct.SqlCredentials(
+        drivername='postgresql',
+        username=load_to['configuration']['user'],
+        password=load_to['configuration']['password'],
+        host=load_to['configuration']['host'],
+        port=load_to['configuration']['port'],
+        database=load_to['configuration']['database'],
+    )
+    destination_arg = job.add_argument('destination', destination)
+
+    extract_from_s3_stage = job.add_stage(
+        ExtractFromS3,
+        args_from=[
+            s3_credentials_arg,
+            extract_report_stage,
+            destination_arg,
+            extract_from_s3_params_arg,
+            agency_params_arg,
+            transformation_arg,
+            attachment_parsing_params_arg,
+        ],
+        queue=queues.QUEUE_TASK_DOWNLOADS
+    )
+
+    job.add_stage(
+        update_data_table, args_from=[
+            load_to_arg,
+            agency_params_arg,
+            extract_from_s3_params_arg,
+        ],
+        depends=[extract_from_s3_stage]
+    )
+
+    send_meta_to_rtbmedia_stage = None
+    if send_meta_to_rtbmedia:
+        send_meta_to_rtbmedia_stage = job.add_stage(
+            send_meta_to_rtbmedia_task, args_from=[
+                agency_params_arg,
+                extract_from_s3_params_arg,
+            ],
+            depends=[extract_from_s3_stage]
+        )
+
+    if run_postprocessing:
+        depends_on = [extract_from_s3_stage]
+        if send_meta_to_rtbmedia_stage is not None:
+            depends_on = [send_meta_to_rtbmedia_stage]
+
+        job.add_stage(
+            run_postprocessing_task, args_from=[
+                agency_params_arg,
+                extract_from_s3_params_arg,
+            ],
+            depends=depends_on
+        )
+
+    return job
+
