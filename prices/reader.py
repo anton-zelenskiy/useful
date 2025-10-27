@@ -1,5 +1,6 @@
 """
 XLSX file readers for different Valvoline product files with various structures.
+Follows SOLID principles with separate normalizers for each reader.
 """
 
 import csv
@@ -10,6 +11,181 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
+from Levenshtein import distance
+
+
+class BaseNormalizer(ABC):
+    """Abstract base class for product name normalizers."""
+
+    @abstractmethod
+    def normalize(self, name: str) -> tuple[str, str, str]:
+        """
+        Normalize product name.
+
+        Returns:
+            Tuple of (normalized_name, volume_number, volume_unit)
+        """
+        pass
+
+
+class ValvorineNormalizer(BaseNormalizer):
+
+    def normalize(self, name: str) -> tuple[str, str, str]:
+        if not name:
+            return '', '', ''
+
+        # Add VALVOLINE brand
+        normalized = self._normalize_valvoline_brand(name)
+
+        # Simple volume extraction - look for patterns like "1л", "500мл", "4л", "1L", "500ML"
+        volume_number = ''
+        volume_unit = ''
+
+        # Pattern: digits followed L, ML
+        volume_match = re.search(r'(\d+(?:\.\d+)?)\s*(L|ML)', normalized, re.IGNORECASE)
+        if volume_match:
+            volume_number = volume_match.group(1)
+            volume_unit_raw = volume_match.group(2).lower()
+            if volume_unit_raw in ['л', 'l']:
+                volume_unit = 'L'
+            elif volume_unit_raw in ['мл', 'ml']:
+                volume_unit = 'ML'
+
+        return normalized, volume_number, volume_unit
+
+    def _normalize_valvoline_brand(self, name: str) -> str:
+        """Normalize product name to ensure it starts with VALVOLINE."""
+        if not name:
+            return 'VALVOLINE'
+
+        name = str(name).strip()
+        name_lower = name.lower()
+
+        # Check if already starts with valvoline
+        if name_lower.startswith('valvoline'):
+            return name
+
+        # Check if starts with 'val' (but not valvoline)
+        if name_lower.startswith('val') and not name_lower.startswith('valvoline'):
+            # Replace 'val' with 'valvoline'
+            return 'VALVOLINE' + name[3:]  # Keep original case for rest
+
+        # If doesn't start with valvoline, add it
+        return 'VALVOLINE ' + name
+
+
+class ForsageNormalizer(BaseNormalizer):
+    """Normalizer for Forsage products."""
+
+    def normalize(self, name: str) -> tuple[str, str, str]:
+        """Normalize Forsage product name."""
+        if not name:
+            return '', '', ''
+
+        # Clean up the name
+        normalized = str(name).strip()
+
+        # Remove extra spaces
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        # Convert to uppercase for consistency
+        normalized = normalized.upper()
+
+        # No volume extraction from name since volume comes from package column
+        return normalized, '', ''
+
+
+class RosneftNormalizer(BaseNormalizer):
+    def normalize(self, name: str) -> tuple[str, str, str]:
+        if not name:
+            return '', '', ''
+
+        # Basic normalization
+        normalized = str(name).strip()
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        normalized = normalized.upper()
+
+        return normalized, '', ''
+
+
+def match_products_by_name(csv_file1: str, csv_file2: str, max_distance: int = 3) -> None:
+    """
+    Match products from two CSV files using Levenshtein distance.
+
+    Args:
+        csv_file1: Path to first CSV file (e.g., valvoline_products.csv)
+        csv_file2: Path to second CSV file (e.g., valvoline_products_valsar.csv)
+        max_distance: Maximum Levenshtein distance for a match
+    """
+    print(f'\n=== MATCHING PRODUCTS ===')
+    print(f'CSV file 1: {csv_file1}')
+    print(f'CSV file 2: {csv_file2}')
+    print(f'Max distance: {max_distance}')
+
+    # Read CSV file 1 products
+    csv1_products = []
+    try:
+        with open(csv_file1, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            csv1_products = list(reader)
+        print(f'Loaded {len(csv1_products)} products from CSV file 1')
+    except Exception as e:
+        print(f'Error reading CSV file 1: {e}')
+        return
+
+    # Read CSV file 2 products
+    csv2_products = []
+    try:
+        with open(csv_file2, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            csv2_products = list(reader)
+        print(f'Loaded {len(csv2_products)} products from CSV file 2')
+    except Exception as e:
+        print(f'Error reading CSV file 2: {e}')
+        return
+
+    # Match products
+    matches_found = 0
+    print(f'\n=== MATCHING RESULTS ===')
+
+    for csv1_product in csv1_products:
+        csv1_name = csv1_product.get('normalized_name', '').strip()
+        if not csv1_name:
+            continue
+
+        best_match = None
+        best_distance = float('inf')
+        best_match_product = None
+
+        for csv2_product in csv2_products:
+            csv2_name = csv2_product.get('normalized_name', '').strip()
+            if not csv2_name:
+                continue
+
+            dist = distance(csv1_name.lower(), csv2_name.lower())
+            if dist < best_distance:
+                best_distance = dist
+                best_match = csv2_name
+                best_match_product = csv2_product
+
+        if best_match and best_distance <= max_distance:
+            matches_found += 1
+            print(f'✓ MATCH (distance: {best_distance})')
+            print(f'  File 1: "{csv1_name}"')
+            print(f'  File 2: "{best_match}"')
+            print(f'  Price 1: {csv1_product.get("price", "N/A")}')
+            print(f'  Price 2: {best_match_product.get("price", "N/A")}')
+            print()
+        else:
+            print(f'✗ NO MATCH (best distance: {best_distance})')
+            print(f'  File 1: "{csv1_name}"')
+            print()
+
+    print(f'=== SUMMARY ===')
+    print(f'Total products in file 1: {len(csv1_products)}')
+    print(f'Total products in file 2: {len(csv2_products)}')
+    print(f'Matches found: {matches_found}')
+    print(f'Match rate: {matches_found / len(csv1_products) * 100:.1f}%')
 
 
 def parse_package_info(package_str: str) -> tuple[int, str, str]:
@@ -121,14 +297,16 @@ def normalize_product_name_simple(name: str) -> tuple[str, str, str]:
 class BaseXlsxReader(ABC):
     """Base class for XLSX file readers."""
 
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, normalizer: BaseNormalizer):
         """
-        Initialize reader with XLSX file path.
+        Initialize reader with XLSX file path and normalizer.
 
         Args:
             file_path: Path to XLSX file
+            normalizer: Normalizer instance for this reader
         """
         self.file_path = Path(file_path)
+        self.normalizer = normalizer
         if not self.file_path.exists():
             raise FileNotFoundError(f'File not found: {self.file_path}')
 
@@ -277,7 +455,7 @@ class ValsarXlsxReader(BaseXlsxReader):
                     else ''
                 )
 
-                normalized_name, volume_number, volume_unit = normalize_product_name_simple(name)
+                normalized_name, volume_number, volume_unit = self.normalizer.normalize(name)
 
                 product = {
                     'original_name': name,
@@ -345,9 +523,7 @@ class DistributorsXlsxReader(BaseXlsxReader):
                         continue
 
                     # Process all products (not just valvoline ones)
-                    normalized_name, volume_number, volume_unit = normalize_product_name_simple(
-                        name
-                    )
+                    normalized_name, volume_number, volume_unit = self.normalizer.normalize(name)
 
                     product = {
                         'original_name': name,
@@ -373,58 +549,93 @@ class CostXlsxReader(BaseXlsxReader):
     This file structure needs to be analyzed first.
     """
 
-    def parse_xlsx(self) -> List[Dict[str, Any]]:
+    def parse_xlsx(self) -> list[dict[str, Any]]:
         """Parse cost XLSX file."""
         try:
-            # Try to read the file and analyze its structure
-            df = pd.read_excel(self.file_path)
+            print(f'\n=== DEBUG: Reading {self.file_path.name} ===')
 
-            print(f'Analyzing {self.file_path.name}:')
-            print(f'Shape: {df.shape}')
+            # Read only the specific columns we need
+            columns_to_read = ['Forsage', 'Фасовка', 'Себестоимость с НДС']
+            df = pd.read_excel(self.file_path, usecols=columns_to_read)
+
+            print(f'DataFrame shape: {df.shape}')
             print(f'Columns: {list(df.columns)}')
-            print(f'First few rows:')
-            print(df.head())
+            print(f'Data types:')
+            print(df.dtypes)
+            print(f'\nFirst 10 rows:')
+            print(df.head(10))
+
+            # This file has a hierarchical structure:
+            # - "Forsage" column contains product names (spans multiple rows)
+            # - "Фасовка" column contains package sizes
+            # - "Себестоимость с НДС" contains prices
+            # - "Артикул" contains article numbers
+
+            print(f'\nDetected hierarchical structure:')
+            print(f'- Product names: "Forsage" column')
+            print(f'- Package sizes: "Фасовка" column')
+            print(f'- Prices: "Себестоимость с НДС" column')
+            print(f'- Article numbers: "Артикул" column')
 
             products = []
+            current_product_name = None
 
-            # Look for columns that might contain product names
-            name_columns = []
-            for col in df.columns:
-                col_str = str(col).lower()
-                if any(
-                    keyword in col_str
-                    for keyword in ['наименование', 'название', 'product', 'name', 'товар']
-                ):
-                    name_columns.append(col)
+            # Process rows with hierarchical structure
+            for idx, row in df.iterrows():
+                # Check if this row has a product name
+                forsage_val = row['Forsage']
+                if not pd.isna(forsage_val) and str(forsage_val).strip():
+                    current_product_name = str(forsage_val).strip()
+                    print(f'\nFound new product: "{current_product_name}"')
 
-            print(f'Potential name columns: {name_columns}')
+                # If we have a current product and package info, create product entry
+                if current_product_name:
+                    package_val = row['Фасовка']
+                    price_val = row['Себестоимость с НДС']
 
-            # Process rows
-            for _, row in df.iterrows():
-                for name_col in name_columns:
-                    name = str(row[name_col]).strip()
-                    if pd.isna(row[name_col]) or not name or name.lower() == 'nan':
-                        continue
+                    if (
+                        not pd.isna(package_val)
+                        and str(package_val).strip()
+                        and not pd.isna(price_val)
+                        and str(price_val).strip()
+                    ):
+                        package_str = str(package_val).strip()
+                        price_str = str(price_val).strip()
 
-                    # Process all products (not just valvoline ones)
-                    normalized_name, volume_number, volume_unit = normalize_product_name_simple(
-                        name
-                    )
+                        # Normalize the product name
+                        normalized_name, volume_number, volume_unit = self.normalizer.normalize(
+                            current_product_name
+                        )
 
-                    product = {
-                        'original_name': name,
-                        'normalized_name': normalized_name,
-                        'volume': volume_number,
-                        'volume_unit': volume_unit,
-                        'price': '',
-                        'package': '',
-                    }
-                    products.append(product)
+                        # Parse package info
+                        package_count, package_volume, package_unit = parse_package_info(
+                            package_str
+                        )
+
+                        product = {
+                            'original_name': current_product_name,
+                            'normalized_name': normalized_name,
+                            'volume': package_volume,  # Use package volume, not name volume
+                            'volume_unit': package_unit,
+                            'package_count': package_count,
+                            'price': price_str,
+                            'package': package_str,
+                        }
+                        products.append(product)
+
+                        print(f'  Added product: {package_str} - {price_str}')
+
+            print(f'\n=== SUMMARY ===')
+            print(f'Total rows processed: {len(df)}')
+            print(f'Products found: {len(products)}')
 
             return products
 
         except Exception as e:
             print(f'Error reading cost file {self.file_path.name}: {e}')
+            import traceback
+
+            traceback.print_exc()
             return []
 
 
@@ -449,6 +660,7 @@ def test_package_parsing():
 
 def test_valvoline_normalization():
     """Test the VALVOLINE brand normalization."""
+    normalizer = ValvorineNormalizer()
     test_cases = [
         ('Motor Oil 5W-40', 'VALVOLINE Motor Oil 5W-40'),
         ('VAL Motor Oil', 'VALVOLINE Motor Oil'),
@@ -460,21 +672,41 @@ def test_valvoline_normalization():
 
     print('\n=== Testing VALVOLINE Brand Normalization ===')
     for original, expected in test_cases:
-        result = normalize_valvoline_brand(original)
+        result, _, _ = normalizer.normalize(original)
         status = '✓' if result == expected else '✗'
         print(f"{status} '{original}' -> '{result}' (expected: '{expected}')")
 
 
 if __name__ == '__main__':
     # Test the VALVOLINE normalization
-    test_valvoline_normalization()
+    # test_valvoline_normalization()
 
     # Test package parsing
-    test_package_parsing()
+    # test_package_parsing()
 
     # Process the VALSAR file
     data_dir = Path('data')
-    file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
-    reader = ValsarXlsxReader(file_path=str(data_dir / file_to_read))
-    products = reader.parse_xlsx()
-    reader.save_to_csv(str(data_dir / 'valvoline_products_valsar.csv'), products)
+    # file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
+    # valvorine_normalizer = ValsarNormalizer()
+    # reader = ValsarXlsxReader(
+    #     file_path=str(data_dir / file_to_read), normalizer=valvorine_normalizer
+    # )
+    # products = reader.parse_xlsx()
+    # reader.save_to_csv(str(data_dir / 'valvoline_products_valsar.csv'), products)
+
+    # # Analyze distance distribution to help choose max_distance
+    # csv_file1 = str(data_dir / 'valvoline_products.csv')
+    # csv_file2 = str(data_dir / 'valvoline_products_valsar.csv')
+    # match_products_by_name(csv_file1, csv_file2, max_distance=5)
+
+    # Test CostXlsxReader
+    cost_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
+    cost_normalizer = ForsageNormalizer()
+    cost_reader = CostXlsxReader(file_path=str(data_dir / cost_file), normalizer=cost_normalizer)
+    cost_products = cost_reader.parse_xlsx()
+    cost_reader.save_to_csv(str(data_dir / 'cost_products.csv'), cost_products)
+
+    # Match products from two CSV files
+    csv_file1 = str(data_dir / 'forsage_products.csv')
+    csv_file2 = str(data_dir / 'cost_products.csv')
+    match_products_by_name(csv_file1, csv_file2, max_distance=5)

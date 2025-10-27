@@ -7,7 +7,21 @@ if __name__ == '__main__':
     output_file = 'data/valvoline_products.csv'
 
     try:
-        filter_valvoline_products(input_file, output_file)
+        filter_valvoline_products(input_file, output_file, match_word='valvoline')
+    except Exception as e:
+        print(f'Error: {e}')
+
+    output_file_2 = 'data/forsage_products.csv'
+
+    try:
+        filter_valvoline_products(input_file, output_file_2, match_word='forsage')
+    except Exception as e:
+        print(f'Error: {e}')
+
+    output_file_3 = 'data/rosneft_products.csv'
+
+    try:
+        filter_valvoline_products(input_file, output_file_3, match_word='rosneft')
     except Exception as e:
         print(f'Error: {e}')
 

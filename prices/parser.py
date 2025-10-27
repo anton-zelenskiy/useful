@@ -33,8 +33,8 @@ def common_normalize(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     text = re.sub(r'^,\s*|,\s*$', '', text)  # Remove leading/trailing commas
 
-    # remove "(" and ")"
-    text = re.sub(r'\(|\)', '', text)
+    # replace "(" and ")" to backspace
+    text = re.sub(r'\(|\)', ' ', text)
 
     return text
 
@@ -177,7 +177,10 @@ def normalize_product_name(name: str) -> tuple[str, str, str]:
     return normalized, volume_number, volume_unit
 
 
-def filter_valvoline_products(input_file: str, output_file: str, encoding: str = 'cp1251') -> None:
+def filter_valvoline_products(
+    input_file: str, output_file: str, encoding: str = 'cp1251',
+    match_word: str = 'valvoline'
+) -> None:
     """
     Read CSV file, filter rows where 'name' or 'brand' columns contain 'valvoline',
     and write filtered data to new CSV file.
@@ -206,24 +209,24 @@ def filter_valvoline_products(input_file: str, output_file: str, encoding: str =
                 name = str(row.get('name', '')).lower()
                 brand = str(row.get('brand', '')).lower()
 
-                if 'valvoline' in name or 'valvoline' in brand:
+                if match_word in name or match_word in brand:
                     # Store original name and normalized name with volume info
                     original_name = row.get('name', '')
                     normalized_name, volume_number, volume_unit = normalize_product_name(
                         original_name
                     )
-                    normalized_name_with_volume = f"{normalized_name} {volume_number} {volume_unit}".upper()
+                    normalized_name = f"{normalized_name} {volume_number} {volume_unit}".upper()
                     filtered_rows.append(
                         {
                             'original_name': original_name,
-                            'normalized_name': normalized_name_with_volume,
+                            'normalized_name': normalized_name,
                             'volume': volume_number,
                             'volume_unit': volume_unit,
                         }
                     )
 
             # Write filtered data to output file
-            with open(output_file, 'w', encoding=encoding, newline='') as outfile:
+            with open(output_file, 'w', encoding='utf-8', newline='') as outfile:
                 if filtered_rows:
                     fieldnames = ['original_name', 'normalized_name', 'volume', 'volume_unit']
                     writer = csv.DictWriter(outfile, fieldnames=fieldnames)
