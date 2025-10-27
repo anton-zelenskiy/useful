@@ -227,7 +227,7 @@ def normalize_product_name(name: str) -> tuple[str, str, str]:
     - Apply common normalization first
     - Parse and extract volume information
     - Remove russian characters
-    - Convert to uppercase
+    - Convert to lowercase
     - Replace 'and' to '&' if 'and' is single word (not part of other word)
 
     Args:
@@ -260,8 +260,8 @@ def normalize_product_name(name: str) -> tuple[str, str, str]:
     # Step 6: Normalize viscosity grades
     normalized = normalize_viscosity_grades(normalized)
 
-    # Step 7: Convert to uppercase
-    normalized = normalized.upper()
+    # Step 7: Convert to lowercase
+    normalized = normalized.lower()
 
     # Step 8: Remove ".", ","
     normalized = re.sub(r'[.,]', '', normalized)
@@ -310,7 +310,7 @@ def filter_valvoline_products(
                     normalized_name, volume_number, volume_unit = normalize_product_name(
                         original_name
                     )
-                    normalized_name = f"{normalized_name} {volume_number} {volume_unit}".upper()
+                    normalized_name = f"{normalized_name} {volume_number} {volume_unit}".lower()
                     filtered_rows.append(
                         {
                             'original_name': original_name,

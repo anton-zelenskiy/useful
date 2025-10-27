@@ -2,7 +2,7 @@ from parser import filter_valvoline_products, normalize_product_name, parse_volu
 from pathlib import Path
 
 
-if __name__ == '__main__':
+def main():
     # Process the Ozon products file
     input_file = 'data/ms_ozon_product_202510261943.csv'
     output_file = 'data/valvoline_products.csv'
@@ -53,3 +53,7 @@ if __name__ == '__main__':
         print(f'Normalized: {normalized_name}')
         print(f'Final Volume: {vol_num} {vol_unit}')
         print()
+
+
+if __name__ == '__main__':
+    main()

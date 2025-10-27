@@ -1,4 +1,3 @@
-import csv
 import re
 from abc import ABC, abstractmethod
 from decimal import Decimal, InvalidOperation
@@ -26,7 +25,6 @@ class BaseNormalizer(ABC):
 
 
 class ValvolineNormalizer(BaseNormalizer):
-
     def normalize(self, name: str) -> tuple[str, str, str]:
         if not name:
             return '', '', ''
@@ -121,10 +119,10 @@ def match_products_by_name(csv_file1: str, csv_file2: str, max_distance: int = 3
 
     # Use CSV reader to read both files
     csv_reader = ReaderFactory.create_csv_reader()
-    
+
     # Read CSV file 1 products
     csv1_products = csv_reader.read(csv_file1)
-    
+
     # Read CSV file 2 products
     csv2_products = csv_reader.read(csv_file2)
 
@@ -317,7 +315,7 @@ class BaseXlsxReader(ABC):
         if not products:
             print(f'No products found in {self.file_path.name}')
             return
-        
+
         self.writer.write(output_file, products)
 
 
@@ -478,66 +476,6 @@ class ValvolineXlsxReader(BaseXlsxReader):
         return 1, '', ''
 
 
-class DistributorsXlsxReader(BaseXlsxReader):
-    """
-    Reader for distributors file: `Дистрибьюторы_РФ_фасовка_август_2025.xlsm`
-
-    This file structure needs to be analyzed first.
-    """
-
-    def parse_xlsx(self) -> List[Dict[str, Any]]:
-        """Parse distributors XLSX file."""
-        try:
-            # Try to read the file and analyze its structure
-            df = pd.read_excel(self.file_path)
-
-            print(f'Analyzing {self.file_path.name}:')
-            print(f'Shape: {df.shape}')
-            print(f'Columns: {list(df.columns)}')
-            print(f'First few rows:')
-            print(df.head())
-
-            products = []
-
-            # Look for columns that might contain product names
-            name_columns = []
-            for col in df.columns:
-                col_str = str(col).lower()
-                if any(
-                    keyword in col_str
-                    for keyword in ['наименование', 'название', 'product', 'name', 'товар']
-                ):
-                    name_columns.append(col)
-
-            print(f'Potential name columns: {name_columns}')
-
-            # Process rows
-            for _, row in df.iterrows():
-                for name_col in name_columns:
-                    name = str(row[name_col]).strip()
-                    if pd.isna(row[name_col]) or not name or name.lower() == 'nan':
-                        continue
-
-                    # Process all products (not just valvoline ones)
-                    normalized_name, volume_number, volume_unit = self.normalizer.normalize(name)
-
-                    product = {
-                        'original_name': name,
-                        'normalized_name': normalized_name,
-                        'volume': volume_number,
-                        'volume_unit': volume_unit,
-                        'price': '',
-                        'package': '',
-                    }
-                    products.append(product)
-
-            return products
-
-        except Exception as e:
-            print(f'Error reading distributors file {self.file_path.name}: {e}')
-            return []
-
-
 class ForsageXlsxReader(BaseXlsxReader):
     """
     Reader for cost file: `Прайс себестоимость от 01.10.2025г..xlsx`
@@ -565,13 +503,11 @@ class ForsageXlsxReader(BaseXlsxReader):
             # - "Forsage" column contains product names (spans multiple rows)
             # - "Фасовка" column contains package sizes
             # - "Себестоимость с НДС" contains prices
-            # - "Артикул" contains article numbers
 
             print(f'\nDetected hierarchical structure:')
             print(f'- Product names: "Forsage" column')
             print(f'- Package sizes: "Фасовка" column')
             print(f'- Prices: "Себестоимость с НДС" column')
-            print(f'- Article numbers: "Артикул" column')
 
             products = []
             current_product_name = None
@@ -604,8 +540,8 @@ class ForsageXlsxReader(BaseXlsxReader):
                         )
 
                         # Parse package info using writer's method
-                        package_count, package_volume, package_unit = self.writer._parse_package_info(
-                            package_str
+                        package_count, package_volume, package_unit = (
+                            self.writer._parse_package_info(package_str)
                         )
 
                         product = {
@@ -635,97 +571,153 @@ class ForsageXlsxReader(BaseXlsxReader):
             return []
 
 
-def test_package_parsing():
-    """Test the package parsing functionality."""
-    writer = WriterFactory.create_writer('csv')
-    test_cases = [
-        ('30 L', (1, '30', 'L')),
-        ('6 x 5 L', (6, '5', 'L')),
-        ('12 × 500 ML', (12, '500', 'ML')),  # Using × symbol
-        ('6X5L', (6, '5', 'L')),  # No spaces
-        ('1 x 1 L', (1, '1', 'L')),
-        ('', (1, '', '')),
-        ('invalid package', (1, '', '')),
-    ]
+class RosneftXlsxReader(BaseXlsxReader):
+    """
+    Reader for Rosneft distributors file: `Дистрибьюторы_РФ_фасовка_август_2025.xlsm`
 
-    print('\n=== Testing Package Parsing ===')
-    for package_str, expected in test_cases:
-        result = writer._parse_package_info(package_str)
-        status = '✓' if result == expected else '✗'
-        print(f"{status} '{package_str}' -> {result} (expected: {expected})")
+    Structure:
+    - Header starts from 10th row (row 9 in 0-based indexing)
+    - Header consists of 4 rows from 10 to 13 (rows 9-12 in 0-based indexing)
+    - Data starts from row 15 (row 14 in 0-based indexing)
+    """
 
+    def parse_xlsx(self) -> List[Dict[str, Any]]:
+        """Parse Rosneft distributors XLSX file."""
+        try:
+            print(f'\n=== DEBUG: Reading {self.file_path.name} ===')
 
-def test_valvoline_normalization():
-    """Test the VALVOLINE brand normalization."""
-    normalizer = ValvolineNormalizer()
-    test_cases = [
-        ('Motor Oil 5W-40', 'VALVOLINE Motor Oil 5W-40'),
-        ('VAL Motor Oil', 'VALVOLINE Motor Oil'),
-        ('valvoline Gear Oil', 'valvoline Gear Oil'),  # Already has valvoline
-        ('VALVOLINE ATF', 'VALVOLINE ATF'),  # Already has VALVOLINE
-        ('', 'VALVOLINE'),
-        ('Val Motor Oil', 'VALVOLINE Motor Oil'),
-    ]
+            # Read the specific "РНПК" sheet
+            sheet_name = 'РНПК'
+            print(f'\n=== READING SHEET: {sheet_name} ===')
 
-    print('\n=== Testing VALVOLINE Brand Normalization ===')
-    for original, expected in test_cases:
-        result, _, _ = normalizer.normalize(original)
-        status = '✓' if result == expected else '✗'
-        print(f"{status} '{original}' -> '{result}' (expected: '{expected}')")
+            # Read with simple header structure
+            # Skip first 12 rows, use row 12 as header (where "за штуку" is)
+            print(f'Reading with simple header (skiprows=9, header=0)...')
+            df = pd.read_excel(self.file_path, sheet_name=sheet_name, skiprows=9, header=0)
 
+            print(f'DataFrame shape: {df.shape}')
+            print(f'Columns: {df.columns.tolist()}')
+            print(f'\nFirst 20 rows:')
+            print(df.head(20))
 
+            # Find the specific columns we need
+            name_column = 'Наименование'
+            price_column = df.columns[8]
+            package_column = 'Упаковка'
 
-class ValvolineReportGenerator:
-    def __init__(self, products: List[Dict[str, Any]]):
+            products = []
 
-        self.products = products
+            # Process rows using the specific columns we found
+            print(f'\n=== PROCESSING PRODUCTS ===')
+            for idx, row in df.iterrows():
+                name = str(row[name_column]).strip()
+                package = str(row[package_column]).strip()
+                price = str(row[price_column]).strip()
 
-    def generate_report(self) -> None:
-        """Generate a report of the products."""
-        print(f'Generating report for {len(self.products)} products')
-        for product in self.products:
-            print(f'Product: {product["original_name"]}')
-            print(f'Normalized name: {product["normalized_name"]}')
-            print(f'Volume: {product["volume"]}')
-            print(f'Volume unit: {product["volume_unit"]}')
-            print(f'Package count: {product["package_count"]}')
+                # Parse package information using writer's method
+                package_count, package_volume, package_unit = self._parse_package_info(package)
+
+                # Skip empty rows
+                if pd.isna(row[name_column]) or not name or name.lower() == 'nan':
+                    print(f'Skipping empty row: {row}')
+                    continue
+
+                product = {
+                    'original_name': name,
+                    'normalized_name': name,
+                    'volume': package_volume,  # Use package volume, not name volume
+                    'volume_unit': package_unit,
+                    'package_count': package_count,
+                    'price': price,
+                    'package': package,
+                }
+                products.append(product)
+
+            print(f'\n=== SUMMARY ===')
+            print(f'Total products found: {len(products)}')
+
+            return products
+
+        except Exception as e:
+            print(f'Error reading Rosneft file {self.file_path.name}: {e}')
+            import traceback
+
+            traceback.print_exc()
+            return []
+
+    def _parse_package_info(self, package_str: str) -> tuple[int, str, str]:
+        """
+        Parse package information from strings like:
+        - "канистра 1 л" -> (1, "1", "л")
+        - "канистра 4 л" -> (1, "4", "л")
+        - "бочка 175 кг" -> (1, "175", "кг")
+
+        Args:
+            package_str: Package string to parse
+
+        Returns:
+            Tuple of (package_count, package_volume, package_unit)
+        """
+        if not package_str:
+            return 1, '', ''
+
+        package_str = str(package_str).strip().lower()
+
+        # Pattern 1: "канистра 1 л" or "канистра 4 л"
+        pattern = r'(\d+(?:\.\d+)?)\s*(л|кг)'
+        match = re.search(pattern, package_str, re.IGNORECASE)
+        if match:
+            volume = match.group(1)
+            unit = match.group(2).upper()
+            return 1, volume, unit
+
+        return 1, '', ''
 
 
 if __name__ == '__main__':
-    # Test the VALVOLINE normalization
-    # test_valvoline_normalization()
-
-    # Test package parsing
-    # test_package_parsing()
-
     # Process the VALSAR file
     data_dir = Path('data')
-    file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
-    valvoline_normalizer = ValvolineNormalizer()
-    reader = ValvolineXlsxReader(
-        file_path=str(data_dir / file_to_read), normalizer=valvoline_normalizer
-    )
-    products = reader.parse_xlsx()
-    reader.save_to_file(str(data_dir / 'valvoline_products_xlsx.csv'), products)
+    # file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
+    # valvoline_normalizer = ValvolineNormalizer()
+    # reader = ValvolineXlsxReader(
+    #     file_path=str(data_dir / file_to_read), normalizer=valvoline_normalizer
+    # )
+    # products = reader.parse_xlsx()
+    # reader.save_to_file(str(data_dir / 'valvoline_products_xlsx.csv'), products)
 
-    # Analyze distance distribution to help choose max_distance
-    csv_file1 = str(data_dir / 'valvoline_products.csv')
-    csv_file2 = str(data_dir / 'valvoline_products_xlsx.csv')
-    match_products_by_name(csv_file1, csv_file2, max_distance=5)
+    # # Analyze distance distribution to help choose max_distance
+    # csv_file1 = str(data_dir / 'valvoline_products.csv')
+    # csv_file2 = str(data_dir / 'valvoline_products_xlsx.csv')
+    # match_products_by_name(csv_file1, csv_file2, max_distance=5)
 
-    # Test CostXlsxReader
-    forsage_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
-    forsage_normalizer = ForsageNormalizer()
-    cost_writer = WriterFactory.create_writer('csv')
-    cost_reader = ForsageXlsxReader(
-        file_path=str(data_dir / forsage_file), 
-        normalizer=forsage_normalizer,
-        writer=cost_writer
+    # # Test CostXlsxReader
+    # forsage_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
+    # forsage_normalizer = ForsageNormalizer()
+    # cost_writer = WriterFactory.create_writer('csv')
+    # cost_reader = ForsageXlsxReader(
+    #     file_path=str(data_dir / forsage_file),
+    #     normalizer=forsage_normalizer,
+    #     writer=cost_writer
+    # )
+    # cost_products = cost_reader.parse_xlsx()
+    # cost_reader.save_to_file(str(data_dir / 'forsage_products_xlsx.csv'), cost_products)
+
+    # # Match products from two CSV files
+    # csv_file1 = str(data_dir / 'forsage_products.csv')
+    # csv_file2 = str(data_dir / 'forsage_products_xlsx.csv')
+    # match_products_by_name(csv_file1, csv_file2, max_distance=5)
+
+    # Test RosneftXlsxReader - analyze file structure first
+    rosneft_file = 'Дистрибьюторы_РФ_фасовка_август_2025.xlsm'
+    rosneft_normalizer = RosneftNormalizer()
+    rosneft_writer = WriterFactory.create_writer('csv')
+    rosneft_reader = RosneftXlsxReader(
+        file_path=str(data_dir / rosneft_file), normalizer=rosneft_normalizer, writer=rosneft_writer
     )
-    cost_products = cost_reader.parse_xlsx()
-    cost_reader.save_to_file(str(data_dir / 'forsage_products_xlsx.csv'), cost_products)
+    rosneft_products = rosneft_reader.parse_xlsx()
+    rosneft_reader.save_to_file(str(data_dir / 'rosneft_products_xlsx.csv'), rosneft_products)
 
     # Match products from two CSV files
-    csv_file1 = str(data_dir / 'forsage_products.csv')
-    csv_file2 = str(data_dir / 'forsage_products_xlsx.csv')
-    match_products_by_name(csv_file1, csv_file2, max_distance=5)
+    # csv_file1 = str(data_dir / 'rosneft_products.csv')
+    # csv_file2 = str(data_dir / 'rosneft_products_xlsx.csv')
+    # match_products_by_name(csv_file1, csv_file2, max_distance=5)
