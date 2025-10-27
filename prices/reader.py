@@ -597,8 +597,8 @@ class RosneftXlsxReader(BaseXlsxReader):
 
             print(f'DataFrame shape: {df.shape}')
             print(f'Columns: {df.columns.tolist()}')
-            print(f'\nFirst 20 rows:')
-            print(df.head(20))
+            print(f'\nFirst 50 rows:')
+            print(df.head(50))
 
             # Find the specific columns we need
             name_column = 'Наименование'
@@ -606,32 +606,49 @@ class RosneftXlsxReader(BaseXlsxReader):
             package_column = 'Упаковка'
 
             products = []
+            current_product_name = None
 
-            # Process rows using the specific columns we found
+            # Process rows with hierarchical structure
             print(f'\n=== PROCESSING PRODUCTS ===')
             for idx, row in df.iterrows():
-                name = str(row[name_column]).strip()
-                package = str(row[package_column]).strip()
-                price = str(row[price_column]).strip()
+                # Check if this row has a product name
+                name_val = row[name_column]
+                if not pd.isna(name_val) and str(name_val).strip():
+                    current_product_name = str(name_val).strip()
+                    print(f'\nFound new product: "{current_product_name}"')
 
-                # Parse package information using writer's method
-                package_count, package_volume, package_unit = self._parse_package_info(package)
+                # If we have a current product and package info, create product entry
+                if current_product_name:
+                    package_val = row[package_column]
+                    price_val = row[price_column]
 
-                # Skip empty rows
-                if pd.isna(row[name_column]) or not name or name.lower() == 'nan':
-                    print(f'Skipping empty row: {row}')
-                    continue
+                    if (
+                        not pd.isna(package_val)
+                        and str(package_val).strip()
+                        and not pd.isna(price_val)
+                        and str(price_val).strip()
+                    ):
+                        package_str = str(package_val).strip()
+                        price_str = str(price_val).strip()
 
-                product = {
-                    'original_name': name,
-                    'normalized_name': name,
-                    'volume': package_volume,  # Use package volume, not name volume
-                    'volume_unit': package_unit,
-                    'package_count': package_count,
-                    'price': price,
-                    'package': package,
-                }
-                products.append(product)
+                        # Parse package information using writer's method
+                        package_count, package_volume, package_unit = self._parse_package_info(package_str)
+
+                        # Normalize the product name
+                        normalized_name, volume_number, volume_unit = self.normalizer.normalize(current_product_name)
+
+                        product = {
+                            'original_name': current_product_name,
+                            'normalized_name': normalized_name,
+                            'volume': package_volume,  # Use package volume, not name volume
+                            'volume_unit': package_unit,
+                            'package_count': package_count,
+                            'price': price_str,
+                            'package': package_str,
+                        }
+                        products.append(product)
+
+                        print(f'  Added product: {package_str} - {price_str}')
 
             print(f'\n=== SUMMARY ===')
             print(f'Total products found: {len(products)}')
@@ -675,7 +692,6 @@ class RosneftXlsxReader(BaseXlsxReader):
 
 
 if __name__ == '__main__':
-    # Process the VALSAR file
     data_dir = Path('data')
     # file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
     # valvoline_normalizer = ValvolineNormalizer()
