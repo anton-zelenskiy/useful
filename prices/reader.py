@@ -1,8 +1,3 @@
-"""
-XLSX file readers for different Valvoline product files with various structures.
-Follows SOLID principles with separate normalizers for each reader.
-"""
-
 import csv
 import re
 from abc import ABC, abstractmethod
@@ -12,6 +7,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 from Levenshtein import distance
+from writer import FileWriter, WriterFactory, ReaderFactory
 
 
 class BaseNormalizer(ABC):
@@ -28,7 +24,7 @@ class BaseNormalizer(ABC):
         pass
 
 
-class ValvorineNormalizer(BaseNormalizer):
+class ValvolineNormalizer(BaseNormalizer):
 
     def normalize(self, name: str) -> tuple[str, str, str]:
         if not name:
@@ -122,27 +118,14 @@ def match_products_by_name(csv_file1: str, csv_file2: str, max_distance: int = 3
     print(f'CSV file 2: {csv_file2}')
     print(f'Max distance: {max_distance}')
 
+    # Use CSV reader to read both files
+    csv_reader = ReaderFactory.create_csv_reader()
+    
     # Read CSV file 1 products
-    csv1_products = []
-    try:
-        with open(csv_file1, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            csv1_products = list(reader)
-        print(f'Loaded {len(csv1_products)} products from CSV file 1')
-    except Exception as e:
-        print(f'Error reading CSV file 1: {e}')
-        return
-
+    csv1_products = csv_reader.read(csv_file1)
+    
     # Read CSV file 2 products
-    csv2_products = []
-    try:
-        with open(csv_file2, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            csv2_products = list(reader)
-        print(f'Loaded {len(csv2_products)} products from CSV file 2')
-    except Exception as e:
-        print(f'Error reading CSV file 2: {e}')
-        return
+    csv2_products = csv_reader.read(csv_file2)
 
     # Match products
     matches_found = 0
@@ -297,93 +280,44 @@ def normalize_product_name_simple(name: str) -> tuple[str, str, str]:
 class BaseXlsxReader(ABC):
     """Base class for XLSX file readers."""
 
-    def __init__(self, file_path: str, normalizer: BaseNormalizer):
+    def __init__(self, file_path: str, normalizer: BaseNormalizer, writer: FileWriter = None):
         """
-        Initialize reader with XLSX file path and normalizer.
+        Initialize reader with XLSX file path, normalizer, and writer.
 
         Args:
             file_path: Path to XLSX file
             normalizer: Normalizer instance for this reader
+            writer: Writer instance for output (defaults to CSVWriter)
         """
         self.file_path = Path(file_path)
         self.normalizer = normalizer
+        self.writer = writer or WriterFactory.create_writer('csv')
         if not self.file_path.exists():
             raise FileNotFoundError(f'File not found: {self.file_path}')
 
     @abstractmethod
     def parse_xlsx(self) -> List[Dict[str, Any]]:
         """
-        Parse XLSX file and extract Valvoline products.
+        Parse XLSX file and extract products.
 
         Returns:
             List of dictionaries with product data
         """
         pass
 
-    def save_to_csv(self, output_file: str, products: List[Dict[str, Any]]) -> None:
+    def save_to_file(self, output_file: str, products: List[Dict[str, Any]]) -> None:
         """
-        Save products to CSV file with standardized columns.
+        Save products to file using the configured writer.
 
         Args:
-            output_file: Path to output CSV file
+            output_file: Path to output file
             products: List of product dictionaries
         """
         if not products:
-            print(f'No Valvoline products found in {self.file_path.name}')
+            print(f'No products found in {self.file_path.name}')
             return
-
-        # Create simplified output with standardized columns
-        simplified_products = []
-        for product in products:
-            # Parse package information
-            package_count, package_volume, package_unit = parse_package_info(
-                product.get('package', '')
-            )
-
-            # Parse price as Decimal
-            price_str = product.get('price', '')
-            try:
-                price = Decimal(str(price_str)) if price_str else Decimal('0')
-            except (InvalidOperation, ValueError):
-                price = Decimal('0')
-
-            # Calculate total price: price_per_liter * package_volume * package_count
-            try:
-                package_volume_decimal = Decimal(package_volume) if package_volume else Decimal('0')
-                package_count_int = int(package_count) if package_count else 1
-                price_total = price * package_volume_decimal * package_count_int
-            except (InvalidOperation, ValueError):
-                price_total = Decimal('0')
-
-            simplified_products.append(
-                {
-                    'original_name': product.get('original_name', ''),
-                    'normalized_name': product.get('normalized_name', ''),
-                    'volume': package_volume,
-                    'volume_unit': package_unit,
-                    'package_count': package_count,
-                    'price': f'{price:.2f}',
-                    'price_total': f'{price_total:.2f}',
-                }
-            )
-
-        with open(output_file, 'w', encoding='utf-8', newline='') as outfile:
-            fieldnames = [
-                'original_name',
-                'normalized_name',
-                'volume',
-                'volume_unit',
-                'package_count',
-                'price',
-                'price_total',
-            ]
-            writer = csv.DictWriter(outfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(simplified_products)
-
-        print(
-            f'Found {len(products)} Valvoline products in {self.file_path.name}, saved to {output_file}'
-        )
+        
+        self.writer.write(output_file, products)
 
 
 class ValsarXlsxReader(BaseXlsxReader):
@@ -607,8 +541,8 @@ class CostXlsxReader(BaseXlsxReader):
                             current_product_name
                         )
 
-                        # Parse package info
-                        package_count, package_volume, package_unit = parse_package_info(
+                        # Parse package info using writer's method
+                        package_count, package_volume, package_unit = self.writer._parse_package_info(
                             package_str
                         )
 
@@ -641,6 +575,7 @@ class CostXlsxReader(BaseXlsxReader):
 
 def test_package_parsing():
     """Test the package parsing functionality."""
+    writer = WriterFactory.create_writer('csv')
     test_cases = [
         ('30 L', (1, '30', 'L')),
         ('6 x 5 L', (6, '5', 'L')),
@@ -653,14 +588,14 @@ def test_package_parsing():
 
     print('\n=== Testing Package Parsing ===')
     for package_str, expected in test_cases:
-        result = parse_package_info(package_str)
+        result = writer._parse_package_info(package_str)
         status = '✓' if result == expected else '✗'
         print(f"{status} '{package_str}' -> {result} (expected: {expected})")
 
 
 def test_valvoline_normalization():
     """Test the VALVOLINE brand normalization."""
-    normalizer = ValvorineNormalizer()
+    normalizer = ValvolineNormalizer()
     test_cases = [
         ('Motor Oil 5W-40', 'VALVOLINE Motor Oil 5W-40'),
         ('VAL Motor Oil', 'VALVOLINE Motor Oil'),
@@ -686,25 +621,30 @@ if __name__ == '__main__':
 
     # Process the VALSAR file
     data_dir = Path('data')
-    # file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
-    # valvorine_normalizer = ValsarNormalizer()
-    # reader = ValsarXlsxReader(
-    #     file_path=str(data_dir / file_to_read), normalizer=valvorine_normalizer
-    # )
-    # products = reader.parse_xlsx()
-    # reader.save_to_csv(str(data_dir / 'valvoline_products_valsar.csv'), products)
+    file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
+    valvoline_normalizer = ValvolineNormalizer()
+    reader = ValsarXlsxReader(
+        file_path=str(data_dir / file_to_read), normalizer=valvoline_normalizer
+    )
+    products = reader.parse_xlsx()
+    reader.save_to_file(str(data_dir / 'valvoline_products_valsar.csv'), products)
 
-    # # Analyze distance distribution to help choose max_distance
-    # csv_file1 = str(data_dir / 'valvoline_products.csv')
-    # csv_file2 = str(data_dir / 'valvoline_products_valsar.csv')
-    # match_products_by_name(csv_file1, csv_file2, max_distance=5)
+    # Analyze distance distribution to help choose max_distance
+    csv_file1 = str(data_dir / 'valvoline_products.csv')
+    csv_file2 = str(data_dir / 'valvoline_products_valsar.csv')
+    match_products_by_name(csv_file1, csv_file2, max_distance=5)
 
     # Test CostXlsxReader
     cost_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
     cost_normalizer = ForsageNormalizer()
-    cost_reader = CostXlsxReader(file_path=str(data_dir / cost_file), normalizer=cost_normalizer)
+    cost_writer = WriterFactory.create_writer('csv')
+    cost_reader = CostXlsxReader(
+        file_path=str(data_dir / cost_file), 
+        normalizer=cost_normalizer,
+        writer=cost_writer
+    )
     cost_products = cost_reader.parse_xlsx()
-    cost_reader.save_to_csv(str(data_dir / 'cost_products.csv'), cost_products)
+    cost_reader.save_to_file(str(data_dir / 'cost_products.csv'), cost_products)
 
     # Match products from two CSV files
     csv_file1 = str(data_dir / 'forsage_products.csv')
