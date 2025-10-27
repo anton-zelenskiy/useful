@@ -617,6 +617,16 @@ class RosneftXlsxReader(BaseXlsxReader):
                     current_product_name = str(name_val).strip()
                     print(f'\nFound new product: "{current_product_name}"')
 
+
+                package_val = row[package_column]
+                price_val = row[price_column]
+
+                if (
+                    pd.isna(package_val)
+                    and pd.isna(price_val)
+                ):
+                    continue
+
                 # If we have a current product and package info, create product entry
                 if current_product_name:
                     package_val = row[package_column]
