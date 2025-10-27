@@ -7,7 +7,8 @@ from typing import Any, Dict, List
 
 import pandas as pd
 from Levenshtein import distance
-from writer import FileWriter, WriterFactory, ReaderFactory
+from parser import ReaderFactory
+from writer import FileWriter, WriterFactory
 
 
 class BaseNormalizer(ABC):
@@ -320,7 +321,7 @@ class BaseXlsxReader(ABC):
         self.writer.write(output_file, products)
 
 
-class ValsarXlsxReader(BaseXlsxReader):
+class ValvolineXlsxReader(BaseXlsxReader):
     """
     Reader for VALSAR price file: `Прайс ВАЛСАР с 01.09.2025_new.xlsx`
 
@@ -383,21 +384,24 @@ class ValsarXlsxReader(BaseXlsxReader):
                     if package_cols and not pd.isna(row[package_cols[0]])
                     else ''
                 )
+
+                package_count, volume, volume_unit = self._parse_package_info(package)
+
                 price = (
                     str(row[price_cols[0]]).strip()
                     if price_cols and not pd.isna(row[price_cols[0]])
                     else ''
                 )
 
-                normalized_name, volume_number, volume_unit = self.normalizer.normalize(name)
+                normalized_name = self._normalize_name(name)
 
                 product = {
                     'original_name': name,
                     'normalized_name': normalized_name,
-                    'volume': volume_number,
+                    'volume': volume,
                     'volume_unit': volume_unit,
+                    'package_count': package_count,
                     'price': price,
-                    'package': package,
                 }
                 products.append(product)
 
@@ -414,6 +418,64 @@ class ValsarXlsxReader(BaseXlsxReader):
 
             traceback.print_exc()
             return []
+
+    def _normalize_name(self, name: str) -> str:
+        """Normalize product name to ensure it starts with VALVOLINE."""
+        if not name:
+            return 'VALVOLINE'
+
+        name = str(name).strip()
+        name_lower = name.lower()
+
+        # Check if already starts with valvoline
+        if name_lower.startswith('valvoline'):
+            return name
+
+        # Check if starts with 'val' (but not valvoline)
+        if name_lower.startswith('val') and not name_lower.startswith('valvoline'):
+            # Replace 'val' with 'valvoline'
+            return 'VALVOLINE' + name[3:]  # Keep original case for rest
+
+        # If doesn't start with valvoline, add it
+        return 'VALVOLINE ' + name
+
+    def _parse_package_info(self, package_str: str) -> tuple[int, str, str]:
+        """
+        Parse package information from strings like:
+        - "30 L" -> (1, "30", "L")
+        - "6 x 5 L" -> (6, "5", "L")
+        - "12 x 500 ML" -> (12, "500", "ML")
+
+        Args:
+            package_str: Package string to parse
+
+        Returns:
+            Tuple of (package_count, package_volume, package_unit)
+        """
+        if not package_str:
+            return 1, '', ''
+
+        package_str = str(package_str).strip().upper()
+
+        # Pattern 1: "6 x 5 L" or "12 x 500 ML" (multi-package)
+        multi_pattern = r'(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(L|ML)'
+        multi_match = re.search(multi_pattern, package_str, re.IGNORECASE)
+        if multi_match:
+            count = int(multi_match.group(1))
+            volume = multi_match.group(2)
+            unit = multi_match.group(3).upper()
+            return count, volume, unit
+
+        # Pattern 2: "30 L" (single package)
+        single_pattern = r'(\d+(?:\.\d+)?)\s*(L|ML)'
+        single_match = re.search(single_pattern, package_str, re.IGNORECASE)
+        if single_match:
+            volume = single_match.group(1)
+            unit = single_match.group(2).upper()
+            return 1, volume, unit
+
+        # If no pattern matches, return default
+        return 1, '', ''
 
 
 class DistributorsXlsxReader(BaseXlsxReader):
@@ -476,7 +538,7 @@ class DistributorsXlsxReader(BaseXlsxReader):
             return []
 
 
-class CostXlsxReader(BaseXlsxReader):
+class ForsageXlsxReader(BaseXlsxReader):
     """
     Reader for cost file: `Прайс себестоимость от 01.10.2025г..xlsx`
 
@@ -612,6 +674,23 @@ def test_valvoline_normalization():
         print(f"{status} '{original}' -> '{result}' (expected: '{expected}')")
 
 
+
+class ValvolineReportGenerator:
+    def __init__(self, products: List[Dict[str, Any]]):
+
+        self.products = products
+
+    def generate_report(self) -> None:
+        """Generate a report of the products."""
+        print(f'Generating report for {len(self.products)} products')
+        for product in self.products:
+            print(f'Product: {product["original_name"]}')
+            print(f'Normalized name: {product["normalized_name"]}')
+            print(f'Volume: {product["volume"]}')
+            print(f'Volume unit: {product["volume_unit"]}')
+            print(f'Package count: {product["package_count"]}')
+
+
 if __name__ == '__main__':
     # Test the VALVOLINE normalization
     # test_valvoline_normalization()
@@ -623,30 +702,30 @@ if __name__ == '__main__':
     data_dir = Path('data')
     file_to_read = 'Прайс ВАЛСАР с 01.09.2025_new.xlsx'
     valvoline_normalizer = ValvolineNormalizer()
-    reader = ValsarXlsxReader(
+    reader = ValvolineXlsxReader(
         file_path=str(data_dir / file_to_read), normalizer=valvoline_normalizer
     )
     products = reader.parse_xlsx()
-    reader.save_to_file(str(data_dir / 'valvoline_products_valsar.csv'), products)
+    reader.save_to_file(str(data_dir / 'valvoline_products_xlsx.csv'), products)
 
     # Analyze distance distribution to help choose max_distance
     csv_file1 = str(data_dir / 'valvoline_products.csv')
-    csv_file2 = str(data_dir / 'valvoline_products_valsar.csv')
+    csv_file2 = str(data_dir / 'valvoline_products_xlsx.csv')
     match_products_by_name(csv_file1, csv_file2, max_distance=5)
 
     # Test CostXlsxReader
-    cost_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
-    cost_normalizer = ForsageNormalizer()
+    forsage_file = 'Прайс себестоимость от 01.10.2025г..xlsx'
+    forsage_normalizer = ForsageNormalizer()
     cost_writer = WriterFactory.create_writer('csv')
-    cost_reader = CostXlsxReader(
-        file_path=str(data_dir / cost_file), 
-        normalizer=cost_normalizer,
+    cost_reader = ForsageXlsxReader(
+        file_path=str(data_dir / forsage_file), 
+        normalizer=forsage_normalizer,
         writer=cost_writer
     )
     cost_products = cost_reader.parse_xlsx()
-    cost_reader.save_to_file(str(data_dir / 'cost_products.csv'), cost_products)
+    cost_reader.save_to_file(str(data_dir / 'forsage_products_xlsx.csv'), cost_products)
 
     # Match products from two CSV files
     csv_file1 = str(data_dir / 'forsage_products.csv')
-    csv_file2 = str(data_dir / 'cost_products.csv')
+    csv_file2 = str(data_dir / 'forsage_products_xlsx.csv')
     match_products_by_name(csv_file1, csv_file2, max_distance=5)

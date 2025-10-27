@@ -1,6 +1,101 @@
 import csv
 import re
+from abc import ABC, abstractmethod
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any, Dict, List
+
+
+class FileReader(ABC):
+    """Abstract base class for file readers."""
+
+    @abstractmethod
+    def read(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Read data from file.
+
+        Args:
+            file_path: Path to input file
+
+        Returns:
+            List of dictionaries read from file
+        """
+        pass
+
+
+class CSVReader(FileReader):
+    """CSV file reader."""
+
+    def __init__(self, encoding: str = 'utf-8'):
+        """
+        Initialize CSV reader.
+
+        Args:
+            encoding: File encoding
+        """
+        self.encoding = encoding
+
+    def read(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Read CSV file.
+
+        Args:
+            file_path: Path to CSV file
+
+        Returns:
+            List of dictionaries from CSV
+        """
+        data = []
+        try:
+            with open(file_path, 'r', encoding=self.encoding) as f:
+                reader = csv.DictReader(f)
+                data = list(reader)
+            print(f'Successfully read {len(data)} records from {file_path}')
+        except Exception as e:
+            print(f'Error reading CSV file {file_path}: {e}')
+
+        return data
+
+
+class ReaderFactory:
+    """Factory class for creating appropriate readers."""
+
+    @staticmethod
+    def create_reader(file_type: str) -> FileReader:
+        """
+        Create appropriate reader based on file type.
+
+        Args:
+            file_type: Type of file ('csv', 'json')
+
+        Returns:
+            Appropriate reader instance
+
+        Raises:
+            ValueError: If file type is not supported
+        """
+        readers = {
+            'csv': CSVReader,
+        }
+
+        if file_type.lower() not in readers:
+            raise ValueError(f'Unsupported file type: {file_type}')
+
+        return readers[file_type.lower()]()
+
+    @staticmethod
+    def create_csv_reader(encoding: str = 'utf-8') -> CSVReader:
+        """
+        Create CSV reader with custom encoding.
+
+        Args:
+            encoding: File encoding
+
+        Returns:
+            CSVReader instance
+        """
+        return CSVReader(encoding)
+
 
 VOLUME_MAP = {
     'л': 'l',

@@ -1,6 +1,7 @@
 from parser import filter_valvoline_products, normalize_product_name, parse_volume_from_string
 from pathlib import Path
 
+
 if __name__ == '__main__':
     # Process the Ozon products file
     input_file = 'data/ms_ozon_product_202510261943.csv'
