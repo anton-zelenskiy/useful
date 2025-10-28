@@ -18,13 +18,13 @@ from xlsx_parsers import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-# Prevent duplicate logs: clear existing handlers and disable propagation
 if logger.handlers:
     logger.handlers.clear()
 logger.addHandler(logging.StreamHandler())
 logger.propagate = False
 
 
+# TODO: refactoring needed
 def match_valvoline_products(
     csv_file: str,
     xlsx_file: str,
