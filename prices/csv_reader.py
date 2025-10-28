@@ -1,6 +1,5 @@
 import csv
 import logging
-import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -270,17 +269,6 @@ class CSVProductFilter:
 def filter_valvoline_products(
     input_file: str, encoding: str = 'cp1251', match_word: str = 'valvoline'
 ) -> list[dict[str, Any]]:
-    """
-    Filter Valvoline products from CSV file using SOLID architecture.
-
-    Args:
-        input_file: Path to input CSV file
-        encoding: File encoding (default: cp1251)
-        match_word: Word to match in product name or brand
-
-    Returns:
-        List of filtered Valvoline products
-    """
     reader = CSVReader(encoding)
     filter_ = ValvolineProductFilter(match_word)
     processor = ValvolineProductProcessor()
@@ -291,17 +279,6 @@ def filter_valvoline_products(
 def filter_rosneft_products(
     input_file: str, encoding: str = 'cp1251', match_word: str = 'rosneft'
 ) -> list[dict[str, Any]]:
-    """
-    Filter Rosneft products from CSV file using SOLID architecture.
-
-    Args:
-        input_file: Path to input CSV file
-        encoding: File encoding (default: cp1251)
-        match_word: Word to match in product name or brand
-
-    Returns:
-        List of filtered Rosneft products
-    """
     reader = CSVReader(encoding)
     filter_ = RosneftProductFilter(match_word)
     processor = RosneftProductProcessor()
@@ -312,17 +289,6 @@ def filter_rosneft_products(
 def filter_forsage_products(
     input_file: str, encoding: str = 'cp1251', match_word: str = 'forsage'
 ) -> list[dict[str, Any]]:
-    """
-    Filter Forsage products from CSV file using SOLID architecture.
-
-    Args:
-        input_file: Path to input CSV file
-        encoding: File encoding (default: cp1251)
-        match_word: Word to match in product name or brand
-
-    Returns:
-        List of filtered Forsage products
-    """
     reader = CSVReader(encoding)
     filter_ = ForsageProductFilter(match_word)
     processor = ForsageProductProcessor()
