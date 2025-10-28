@@ -302,7 +302,8 @@ def _match_products(
                 }
             )
         else:
-            print(f'NO MATCH (best distance: {best_distance})')
+            pass
+            # print(f'NO MATCH (best distance: {best_distance})')
 
     print(f'=== {brand_name} SUMMARY ===')
     print(f'Total products in CSV: {len(csv_products)}')
@@ -323,18 +324,18 @@ if __name__ == '__main__':
         encoding='cp1251',
     )
 
-    # match_forsage_products(
-    #     csv_file='data/ms_ozon_product_202510261943.csv',
-    #     xlsx_file='data/Прайс себестоимость от 01.10.2025г..xlsx',
-    #     output_file='data/forsage_products_matched.csv',
-    #     max_distance=3,
-    #     encoding='cp1251',
-    # )
+    match_forsage_products(
+        csv_file='data/ms_ozon_product_202510261943.csv',
+        xlsx_file='data/Прайс себестоимость от 01.10.2025г..xlsx',
+        output_file='data/forsage_products_matched.csv',
+        max_distance=3,
+        encoding='cp1251',
+    )
 
-    # match_rosneft_products(
-    #     csv_file='data/ms_ozon_product_202510261943.csv',
-    #     xlsx_file='data/Дистрибьюторы_РФ_фасовка_август_2025.xlsm',
-    #     output_file='data/rosneft_products_matched.csv',
-    #     max_distance=3,
-    #     encoding='cp1251',
-    # )
+    match_rosneft_products(
+        csv_file='data/ms_ozon_product_202510261943.csv',
+        xlsx_file='data/Дистрибьюторы_РФ_фасовка_август_2025.xlsm',
+        output_file='data/rosneft_products_matched.csv',
+        max_distance=3,
+        encoding='cp1251',
+    )

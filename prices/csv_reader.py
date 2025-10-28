@@ -154,7 +154,9 @@ class ValvolineProductProcessor(ProductProcessor):
     def process_row(self, row: dict[str, Any]) -> dict[str, Any]:
         """Process Valvoline product row."""
         original_name = row.get('name', '')
-        normalized_name, volume_number, volume_unit = normalize_product_name(original_name)
+
+        normalized_name = normalize_product_name(original_name)
+        normalized_name, volume_number, volume_unit = parse_volume_from_string(normalized_name)
 
         normalized_name = remove_russian_characters(normalized_name)
         normalized_name = normalize_viscosity_grades(normalized_name)
@@ -176,15 +178,16 @@ class RosneftProductProcessor(ProductProcessor):
         """Process Rosneft product row."""
         original_name = row.get('name', '')
 
-        # Simple normalization for Rosneft
-        normalized_name = str(original_name).strip().lower()
-        normalized_name = re.sub(r'\s+', ' ', normalized_name).strip()
+        normalized_name = normalize_product_name(original_name)
+        normalized_name, volume_number, volume_unit = parse_volume_from_string(normalized_name)
+
+        normalized_name = remove_russian_characters(normalized_name)
 
         return {
             'original_name': original_name,
             'normalized_name': normalized_name,
-            'volume': '',
-            'volume_unit': '',
+            'volume': volume_number,
+            'volume_unit': volume_unit,
         }
 
 
@@ -195,7 +198,10 @@ class ForsageProductProcessor(ProductProcessor):
         """Process Forsage product row."""
         original_name = row.get('name', '')
 
-        normalized_name, volume_number, volume_unit = normalize_product_name(original_name)
+        normalized_name = normalize_product_name(original_name)
+        normalized_name, volume_number, volume_unit = parse_volume_from_string(normalized_name)
+
+        normalized_name = normalized_name.replace('forsage lubricants', 'forsage')
 
         return {
             'original_name': original_name,
@@ -338,10 +344,9 @@ def parse_volume_from_string(text: str) -> tuple[str, str, str]:
 def remove_russian_characters(text: str) -> str:
     return re.sub(r'[а-яё]', '', text, flags=re.IGNORECASE)
 
-def normalize_product_name(name: str) -> tuple[str, str, str]:
+def normalize_product_name(name: str) -> str:
     if not name:
-        return '', '', ''
-
+        return ''
     # Step 1: Apply common normalization first
     name = str(name).strip()
 
@@ -356,13 +361,6 @@ def normalize_product_name(name: str) -> tuple[str, str, str]:
     # replace "(" and ")" to backspace
     name = re.sub(r'\(|\)', ' ', name)
 
-    # Step 2: Parse volume and get cleaned name
-    name, volume_number, volume_unit = parse_volume_from_string(name)
-
-    if not name:
-        return '', volume_number, volume_unit
-
-
     normalized = re.sub(r'\band\b', '&', name, flags=re.IGNORECASE)
 
     normalized = remove_duplicate_words(normalized)
@@ -373,7 +371,7 @@ def normalize_product_name(name: str) -> tuple[str, str, str]:
 
     normalized = re.sub(r'\s+', ' ', normalized).strip()
 
-    return normalized, volume_number, volume_unit
+    return normalized
 
 
 def filter_valvoline_products(

@@ -1,9 +1,12 @@
+import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from constants import VOLUME_MAP
+from csv_reader import normalize_product_name
 
 
 class BaseNormalizer(ABC):
@@ -349,24 +352,10 @@ class ForsageXlsxReader(BaseXlsxReader):
             return []
 
     def _normalize_name(self, name: str) -> str:
-        """Normalize product name to ensure it starts with VALVOLINE."""
-        if not name:
-            return 'VALVOLINE'
+        name = normalize_product_name(name)
+        name = name.replace('forsage lubricants', 'forsage')
 
-        name = str(name).strip()
-        name_lower = name.lower()
-
-        # Check if already starts with valvoline
-        if name_lower.startswith('valvoline'):
-            return name
-
-        # Check if starts with 'val' (but not valvoline)
-        if name_lower.startswith('val') and not name_lower.startswith('valvoline'):
-            # Replace 'val' with 'valvoline'
-            return 'VALVOLINE' + name[3:]  # Keep original case for rest
-
-        # If doesn't start with valvoline, add it
-        return 'VALVOLINE ' + name
+        return name
 
     def _parse_package_info(self, package_str: str) -> tuple[int, str, str]:
         """
@@ -384,8 +373,10 @@ class ForsageXlsxReader(BaseXlsxReader):
         match = re.search(pattern, package_str, re.IGNORECASE)
         if match:
             volume = match.group(1)
-            unit = match.group(2).lower()
-            return 1, volume, unit
+            volume_unit_raw = match.group(2).lower()
+            if volume_unit_raw in VOLUME_MAP:
+                volume_unit = VOLUME_MAP[volume_unit_raw]
+                return 1, volume, volume_unit
 
         return 1, '', ''
 
@@ -404,19 +395,12 @@ class RosneftXlsxReader(BaseXlsxReader):
         try:
             print(f'\n=== DEBUG: Reading {self.file_path.name} ===')
 
-            # Read the specific "РНПК" sheet
             sheet_name = 'РНПК'
             print(f'\n=== READING SHEET: {sheet_name} ===')
 
-            # Read with simple header structure
-            # Skip first 12 rows, use row 12 as header (where "за штуку" is)
             print(f'Reading with simple header (skiprows=9, header=0)...')
             df = pd.read_excel(self.file_path, sheet_name=sheet_name, skiprows=9, header=0)
 
-            print(f'DataFrame shape: {df.shape}')
-            print(f'Columns: {df.columns.tolist()}')
-            print(f'\nFirst 50 rows:')
-            print(df.head(50))
 
             # Find the specific columns we need
             name_column = 'Наименование'
@@ -426,14 +410,12 @@ class RosneftXlsxReader(BaseXlsxReader):
             products = []
             current_product_name = None
 
-            # Process rows with hierarchical structure
-            print(f'\n=== PROCESSING PRODUCTS ===')
             for idx, row in df.iterrows():
                 # Check if this row has a product name
                 name_val = row[name_column]
                 if not pd.isna(name_val) and str(name_val).strip():
                     current_product_name = str(name_val).strip()
-                    print(f'\nFound new product: "{current_product_name}"')
+                    logging.debug(f'Found new product: "{current_product_name}"')
 
                 package_val = row[package_column]
                 price_val = row[price_column]
@@ -456,27 +438,23 @@ class RosneftXlsxReader(BaseXlsxReader):
                         price_str = str(price_val).strip()
 
                         # Parse package information using writer's method
-                        package_count, package_volume, package_unit = self._parse_package_info(
+                        package_count, volume, volume_unit = self._parse_package_info(
                             package_str
                         )
 
-                        # Normalize the product name
-                        normalized_name, volume_number, volume_unit = self.normalizer.normalize(
-                            current_product_name
-                        )
-
+                        normalized_name = normalize_product_name(current_product_name)
                         product = {
                             'original_name': current_product_name,
                             'normalized_name': normalized_name,
-                            'volume': package_volume,  # Use package volume, not name volume
-                            'volume_unit': package_unit,
+                            'volume': volume,
+                            'volume_unit': volume_unit,
                             'package_count': package_count,
                             'price': price_str,
                             'package': package_str,
                         }
                         products.append(product)
 
-                        print(f'  Added product: {package_str} - {price_str}')
+                        logging.debug(f'  Added product: {package_str} - {price_str}')
 
             print(f'\n=== SUMMARY ===')
             print(f'Total products found: {len(products)}')
@@ -512,7 +490,9 @@ class RosneftXlsxReader(BaseXlsxReader):
         match = re.search(pattern, package_str, re.IGNORECASE)
         if match:
             volume = match.group(1)
-            unit = match.group(2).lower()
-            return 1, volume, unit
+            volume_unit_raw = match.group(2).lower()
+            if volume_unit_raw in VOLUME_MAP:
+                volume_unit = VOLUME_MAP[volume_unit_raw]
+                return 1, volume, volume_unit
 
         return 1, '', ''
