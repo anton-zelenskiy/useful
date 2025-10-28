@@ -310,7 +310,7 @@ def filter_valvoline_products(
                     normalized_name, volume_number, volume_unit = normalize_product_name(
                         original_name
                     )
-                    normalized_name = f"{normalized_name} {volume_number} {volume_unit}".lower()
+                    # normalized_name = f"{normalized_name} {volume_number} {volume_unit}".lower()
                     filtered_rows.append(
                         {
                             'original_name': original_name,
