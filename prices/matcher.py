@@ -17,7 +17,11 @@ from xlsx_parsers import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+# Prevent duplicate logs: clear existing handlers and disable propagation
+if logger.handlers:
+    logger.handlers.clear()
 logger.addHandler(logging.StreamHandler())
+logger.propagate = False
 
 
 def match_valvoline_products(
@@ -47,16 +51,15 @@ def match_valvoline_products(
     if output_file and matched_results:
         processed_results = _process_valvoline_data(matched_results)
         fieldnames = [
+            'name',
             'csv_name',
             'xlsx_name',
             'distance',
-            'csv_price',
             'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
             'xlsx_volume',
             'xlsx_volume_unit',
-            'csv_price_total',
             'xlsx_price_total',
         ]
         writer = CSVWriter(fieldnames)
@@ -76,20 +79,6 @@ def _process_valvoline_data(matched_results: list[dict[str, Any]]) -> list[dict[
     processed_data = []
 
     for item in matched_results:
-        # Process CSV data
-        csv_price_str = item.get('csv_price', '')
-        csv_volume = item.get('csv_volume', '')
-        csv_volume_unit = item.get('csv_volume_unit', '')
-
-        try:
-            csv_price = Decimal(str(csv_price_str)) if csv_price_str else Decimal('0')
-            csv_volume_decimal = Decimal(csv_volume) if csv_volume else Decimal('0')
-            csv_price_total = csv_price * csv_volume_decimal
-        except (InvalidOperation, ValueError):
-            csv_price = Decimal('0')
-            csv_price_total = Decimal('0')
-
-        # Process XLSX data
         xlsx_price_str = item.get('xlsx_price', '')
         xlsx_volume = item.get('xlsx_volume', '')
         xlsx_volume_unit = item.get('xlsx_volume_unit', '')
@@ -97,21 +86,15 @@ def _process_valvoline_data(matched_results: list[dict[str, Any]]) -> list[dict[
         try:
             xlsx_price = Decimal(str(xlsx_price_str)) if xlsx_price_str else Decimal('0')
             xlsx_volume_decimal = Decimal(xlsx_volume) if xlsx_volume else Decimal('0')
-            xlsx_price_total = xlsx_price * xlsx_volume_decimal
+            xlsx_volume_unit_decimal = Decimal(xlsx_volume_unit) if xlsx_volume_unit else Decimal('0')
+            xlsx_price_total = xlsx_price * xlsx_volume_unit_decimal * xlsx_volume_decimal
         except (InvalidOperation, ValueError):
             xlsx_price = Decimal('0')
             xlsx_price_total = Decimal('0')
 
         processed_item = {
-            'csv_name': item.get('csv_name', ''),
-            'xlsx_name': item.get('xlsx_name', ''),
-            'distance': item.get('distance', ''),
+            **item,
             'xlsx_price': f'{xlsx_price:.2f}',
-            'csv_volume': csv_volume,
-            'csv_volume_unit': csv_volume_unit,
-            'xlsx_volume': xlsx_volume,
-            'xlsx_volume_unit': xlsx_volume_unit,
-            'csv_price_total': f'{csv_price_total:.2f}',
             'xlsx_price_total': f'{xlsx_price_total:.2f}',
         }
         processed_data.append(processed_item)
@@ -138,6 +121,7 @@ def match_rosneft_products(
 
     if output_file and matched_results:
         fieldnames = [
+            'name',
             'csv_name',
             'xlsx_name',
             'distance',
@@ -170,6 +154,7 @@ def match_forsage_products(
 
     if output_file and matched_results:
         fieldnames = [
+            'name',
             'csv_name',
             'xlsx_name',
             'distance',
@@ -240,10 +225,17 @@ def _match_products(
 
         if best_match and best_distance <= max_distance:
             matches_found += 1
-            logger.info(f'match found: "{csv_name}", (distance: {best_distance})')
+            logger.info(
+                f'match found: "{csv_name}", (distance: {best_distance})'
+                f'volume: "{best_match_product.get("volume", "")}")'
+                f'volume unit: "{best_match_product.get("volume_unit", "")}")'
+                f'price: "{best_match_product.get("price", "")}")'
+                f'package count: "{best_match_product.get("package_count", "")}")'
+            )
 
             matched_results.append(
                 {
+                    'name': csv_product.get('original_name', ''),
                     'csv_name': csv_name,
                     'xlsx_name': best_match,
                     'distance': best_distance,
