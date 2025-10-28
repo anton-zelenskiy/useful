@@ -1,6 +1,7 @@
 import logging
+from abc import ABC, abstractmethod
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Protocol
 
 from constants import VolumeUnit
 from csv_reader import (
@@ -18,13 +19,212 @@ from xlsx_parsers import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-# Prevent duplicate logs: clear existing handlers and disable propagation
 if logger.handlers:
     logger.handlers.clear()
 logger.addHandler(logging.StreamHandler())
 logger.propagate = False
 
 
+OUTPUT_COLUMNS = [
+    'name',
+    'price',
+    'csv_name',
+    'xlsx_name',
+    'distance',
+    'csv_volume',
+    'csv_volume_unit',
+    'xlsx_volume',
+    'xlsx_volume_unit',
+    'xlsx_price',
+]
+
+
+class ProductFilter(Protocol):
+    """Protocol for filtering products from CSV files."""
+
+    def __call__(self, csv_file: str, encoding: str = 'utf-8') -> list[dict[str, Any]]:
+        """Filter products from CSV file."""
+        ...
+
+
+class XlsxParser(Protocol):
+    """Protocol for parsing XLSX files."""
+
+    def parse_xlsx(self) -> list[dict[str, Any]]:
+        """Parse XLSX file and return products."""
+        ...
+
+
+class ReportGenerator(ABC):
+    """Abstract base class for generating product matching reports."""
+
+    def __init__(self, csv_encoding: str = 'utf-8') -> None:
+        self.csv_encoding = csv_encoding
+
+    @abstractmethod
+    def get_csv_filter(self) -> ProductFilter:
+        """Get the CSV product filter for this brand."""
+        pass
+
+    @abstractmethod
+    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
+        """Get the XLSX parser for this brand."""
+        pass
+
+    @abstractmethod
+    def get_fieldnames(self) -> list[str]:
+        """Get the fieldnames for CSV output."""
+        pass
+
+    def generate_report(
+        self,
+        csv_file: str,
+        xlsx_file: str,
+        output_file: str = None,
+        max_distance: int = 3,
+    ) -> None:
+        """
+        Generate matching report for products.
+
+        Args:
+            csv_file: Path to CSV file with products
+            xlsx_file: Path to XLSX file with products
+            output_file: Path to output CSV file for matched results (optional)
+            max_distance: Maximum Levenshtein distance for a match
+        """
+        # Get CSV products
+        csv_filter = self.get_csv_filter()
+        csv_products = csv_filter(csv_file, encoding=self.csv_encoding)
+
+        # Get XLSX products
+        xlsx_parser = self.get_xlsx_parser(xlsx_file)
+        xlsx_products = xlsx_parser.parse_xlsx()
+
+        # Match products
+        matched_results = _match_products(csv_products, xlsx_products, max_distance)
+
+        # Process results if needed
+        processed_results = self.process_results(matched_results)
+
+        # Write results if output file specified
+        if output_file and processed_results:
+            fieldnames = self.get_fieldnames()
+            writer = CSVWriter(fieldnames)
+            writer.write(output_file, processed_results)
+
+    def process_results(self, matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Process matched results before writing to CSV.
+        Override in subclasses for custom processing.
+
+        Args:
+            matched_results: List of matched products
+
+        Returns:
+            Processed results ready for CSV output
+        """
+        return matched_results
+
+
+class ValvolineReportGenerator(ReportGenerator):
+    """Report generator for Valvoline products."""
+
+    def get_csv_filter(self) -> ProductFilter:
+        return filter_valvoline_products
+
+    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
+        return ValvolineXlsxParser(file_path=xlsx_file)
+
+    def get_fieldnames(self) -> list[str]:
+        return OUTPUT_COLUMNS
+
+    def process_results(self, matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Process Valvoline-specific data with price calculations."""
+        return self._calculate_price(matched_results)
+
+    def _calculate_price(self, matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Calculate total price based on volume and unit conversion.
+
+        All prices are per 1 liter. If volume_unit is ml, convert to liters.
+
+        Args:
+            matched_results: List of matched products
+
+        Returns:
+            Processed data with calculated total prices
+        """
+        processed_data = []
+
+        for item in matched_results:
+            xlsx_price_str = item.get('price', '')
+            xlsx_volume = item.get('xlsx_volume', '')
+            xlsx_volume_unit = VolumeUnit(item.get('xlsx_volume_unit', VolumeUnit.L))
+
+            try:
+                xlsx_price = Decimal(str(xlsx_price_str)) if xlsx_price_str else Decimal('0')
+                xlsx_volume_decimal = Decimal(xlsx_volume) if xlsx_volume else Decimal('0')
+
+                # Convert volume to liters for price calculation
+                volume_in_liters = self._convert_volume_to_liters(xlsx_volume_decimal, xlsx_volume_unit)
+                xlsx_price_total = xlsx_price * volume_in_liters
+            except (InvalidOperation, ValueError):
+                xlsx_price_total = Decimal('0')
+
+            processed_item = {
+                **item,
+                'price': f'{xlsx_price_total:.2f}',
+            }
+            processed_data.append(processed_item)
+
+        return processed_data
+
+
+    def _convert_volume_to_liters(self, volume: Decimal, unit: VolumeUnit) -> Decimal:
+        """
+        Convert volume to liters based on unit.
+
+        Args:
+            volume: Volume value
+            unit: VolumeUnit
+
+        Returns:
+            Volume in liters
+        """
+        if unit == VolumeUnit.ML:
+            return volume / Decimal('1000')
+
+        return volume
+
+
+
+class RosneftReportGenerator(ReportGenerator):
+    """Report generator for Rosneft products."""
+
+    def get_csv_filter(self) -> ProductFilter:
+        return filter_rosneft_products
+
+    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
+        return RosneftXlsxParser(file_path=xlsx_file)
+
+    def get_fieldnames(self) -> list[str]:
+        return OUTPUT_COLUMNS
+
+
+class ForsageReportGenerator(ReportGenerator):
+    """Report generator for Forsage products."""
+
+    def get_csv_filter(self) -> ProductFilter:
+        return filter_forsage_products
+
+    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
+        return ForsageXlsxParser(file_path=xlsx_file)
+
+    def get_fieldnames(self) -> list[str]:
+        return OUTPUT_COLUMNS
+
+
+# Convenience functions that delegate to the appropriate report generator
 def match_valvoline_products(
     csv_file: str,
     xlsx_file: str,
@@ -32,95 +232,9 @@ def match_valvoline_products(
     max_distance: int = 3,
     encoding: str = 'utf-8',
 ) -> None:
-    """
-    Match Valvoline products from CSV file with XLSX file using Levenshtein distance.
-
-    Args:
-        csv_file: Path to CSV file with Valvoline products
-        xlsx_file: Path to XLSX file with Valvoline products
-        output_file: Path to output CSV file for matched results (optional)
-        max_distance: Maximum Levenshtein distance for a match
-        encoding: CSV file encoding
-    """
-    csv_products = filter_valvoline_products(csv_file, encoding=encoding)
-
-    xlsx_reader = ValvolineXlsxParser(file_path=xlsx_file)
-    xlsx_products = xlsx_reader.parse_xlsx()
-
-    matched_results = _match_products(csv_products, xlsx_products, max_distance)
-    processed_results = _calculate_price(matched_results)
-
-    if output_file and processed_results:
-        fieldnames = [
-            'name',
-            'price',
-            'csv_name',
-            'xlsx_name',
-            'distance',
-            'csv_volume',
-            'csv_volume_unit',
-            'xlsx_volume',
-            'xlsx_volume_unit',
-            'xlsx_price',
-        ]
-        writer = CSVWriter(fieldnames)
-        writer.write(output_file, processed_results)
-
-
-def _calculate_price(matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Calculate total price based on volume and unit conversion.
-
-    All prices are per 1 liter. If volume_unit is ml, convert to liters.
-
-    Args:
-        matched_results: List of matched products
-
-    Returns:
-        Processed data with calculated total prices
-    """
-    processed_data = []
-
-    for item in matched_results:
-        xlsx_price_str = item.get('price', '')
-        xlsx_volume = item.get('xlsx_volume', '')
-        xlsx_volume_unit = VolumeUnit(item.get('xlsx_volume_unit', VolumeUnit.L))
-
-        try:
-            xlsx_price = Decimal(str(xlsx_price_str)) if xlsx_price_str else Decimal('0')
-            xlsx_volume_decimal = Decimal(xlsx_volume) if xlsx_volume else Decimal('0')
-
-            # Convert volume to liters for price calculation
-            volume_in_liters = _convert_volume_to_liters(xlsx_volume_decimal, xlsx_volume_unit)
-            xlsx_price_total = xlsx_price * volume_in_liters
-        except (InvalidOperation, ValueError):
-            xlsx_price_total = Decimal('0')
-
-        processed_item = {
-            **item,
-            'price': f'{xlsx_price_total:.2f}',
-        }
-        processed_data.append(processed_item)
-
-    return processed_data
-
-
-def _convert_volume_to_liters(volume: Decimal, unit: VolumeUnit) -> Decimal:
-    """
-    Convert volume to liters based on unit.
-
-    Args:
-        volume: Volume value
-        unit: VolumeUNit
-
-    Returns:
-        Volume in liters
-    """
-
-    if unit == VolumeUnit.ML:
-        return volume / Decimal('1000')
-
-    return volume
+    """Match Valvoline products from CSV file with XLSX file using Levenshtein distance."""
+    generator = ValvolineReportGenerator(csv_encoding=encoding)
+    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
 
 
 def match_rosneft_products(
@@ -130,31 +244,9 @@ def match_rosneft_products(
     max_distance: int = 3,
     encoding: str = 'cp1251',
 ) -> None:
-    """
-    Match Rosneft products from CSV file with XLSX file using Levenshtein distance.
-    """
-    csv_products = filter_rosneft_products(csv_file, encoding=encoding)
-
-    xlsx_reader = RosneftXlsxParser(file_path=xlsx_file)
-    xlsx_products = xlsx_reader.parse_xlsx()
-
-    matched_results = _match_products(csv_products, xlsx_products, max_distance)
-
-    if output_file and matched_results:
-        fieldnames = [
-            'name',
-            'price',
-            'csv_name',
-            'xlsx_name',
-            'distance',
-            'csv_volume',
-            'csv_volume_unit',
-            'xlsx_volume',
-            'xlsx_volume_unit',
-            'xlsx_price',
-        ]
-        writer = CSVWriter(fieldnames)
-        writer.write(output_file, matched_results)
+    """Match Rosneft products from CSV file with XLSX file using Levenshtein distance."""
+    generator = RosneftReportGenerator(csv_encoding=encoding)
+    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
 
 
 def match_forsage_products(
@@ -164,31 +256,9 @@ def match_forsage_products(
     max_distance: int = 3,
     encoding: str = 'cp1251',
 ) -> None:
-    """
-    Match Forsage products from CSV file with XLSX file using Levenshtein distance.
-    """
-    csv_products = filter_forsage_products(csv_file, encoding=encoding)
-
-    xlsx_reader = ForsageXlsxParser(file_path=xlsx_file)
-    xlsx_products = xlsx_reader.parse_xlsx()
-
-    matched_results = _match_products(csv_products, xlsx_products, max_distance)
-
-    if output_file and matched_results:
-        fieldnames = [
-            'name',
-            'price',
-            'csv_name',
-            'xlsx_name',
-            'distance',
-            'csv_volume',
-            'csv_volume_unit',
-            'xlsx_volume',
-            'xlsx_volume_unit',
-            'xlsx_price',
-        ]
-        writer = CSVWriter(fieldnames)
-        writer.write(output_file, matched_results)
+    """Match Forsage products from CSV file with XLSX file using Levenshtein distance."""
+    generator = ForsageReportGenerator(csv_encoding=encoding)
+    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
 
 
 def _match_products(
@@ -237,10 +307,7 @@ def _match_products(
                 )
                 continue
 
-            dist = distance(
-                ' '.join(sorted(csv_name.split())),
-                ' '.join(sorted(xlsx_name.split()))
-            )
+            dist = distance(' '.join(sorted(csv_name.split())), ' '.join(sorted(xlsx_name.split())))
             if dist < best_distance:
                 best_distance = dist
                 best_match = xlsx_name

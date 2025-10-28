@@ -223,8 +223,8 @@ class ForsageProductProcessor(ProductProcessor):
         }
 
 
-class CSVProductFilter:
-    """Main class for filtering CSV products."""
+class ProductReader:
+    """Reader for input products."""
 
     def __init__(
         self,
@@ -233,11 +233,8 @@ class CSVProductFilter:
         processor: ProductProcessor,
     ) -> None:
         """
-        Initialize CSV product filter.
-
         Args:
             reader: File reader instance
-            writer: File writer instance
             filter_: Product filter instance
             processor: Product processor instance
         """
@@ -245,16 +242,8 @@ class CSVProductFilter:
         self.filter = filter_
         self.processor = processor
 
-    def filter_data(self, input_file: str) -> list[dict[str, Any]]:
-        """
-        Filter products and return filtered data.
-
-        Args:
-            input_file: Path to input CSV file
-
-        Returns:
-            List of filtered and processed data
-        """
+    def read_data(self, input_file: str) -> list[dict[str, Any]]:
+        """Read data from input file."""
         all_data = self.reader.read(input_file)
 
         filtered_data = []
@@ -272,8 +261,8 @@ def filter_valvoline_products(
     reader = CSVReader(encoding)
     filter_ = ValvolineProductFilter(match_word)
     processor = ValvolineProductProcessor()
-    csv_filter = CSVProductFilter(reader, filter_, processor)
-    return csv_filter.filter_data(input_file)
+    csv_filter = ProductReader(reader, filter_, processor)
+    return csv_filter.read_data(input_file)
 
 
 def filter_rosneft_products(
@@ -282,8 +271,8 @@ def filter_rosneft_products(
     reader = CSVReader(encoding)
     filter_ = RosneftProductFilter(match_word)
     processor = RosneftProductProcessor()
-    csv_filter = CSVProductFilter(reader, filter_, processor)
-    return csv_filter.filter_data(input_file)
+    csv_filter = ProductReader(reader, filter_, processor)
+    return csv_filter.read_data(input_file)
 
 
 def filter_forsage_products(
@@ -292,5 +281,5 @@ def filter_forsage_products(
     reader = CSVReader(encoding)
     filter_ = ForsageProductFilter(match_word)
     processor = ForsageProductProcessor()
-    csv_filter = CSVProductFilter(reader, filter_, processor)
-    return csv_filter.filter_data(input_file)
+    csv_filter = ProductReader(reader, filter_, processor)
+    return csv_filter.read_data(input_file)
