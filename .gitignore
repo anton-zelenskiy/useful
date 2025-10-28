@@ -1,3 +1,4 @@
 .idea
 prices/data/
 __pycache__/
+.venv/
