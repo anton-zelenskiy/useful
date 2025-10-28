@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 from constants import VOLUME_MAP
-from csv_reader import normalize_product_name
+from normalizers import normalize_product_name
 
 
 class BaseXlsxParser(ABC):
@@ -119,6 +119,7 @@ class ValvolineXlsxParser(BaseXlsxParser):
         Returns:
             Cleaned product name
         """
+
         def replace_match(match: re.Match) -> str:
             second_num = match.group(2)
             unit = match.group(3)
