@@ -21,32 +21,15 @@ class FileWriter(ABC):
 class CSVWriter(FileWriter):
     """CSV file writer with standardized columns."""
 
-    def __init__(self, fieldnames: list[str]) -> None:
-        """
-        Initialize CSV writer with fieldnames.
-
-        Args:
-            fieldnames: List of column names for CSV output
-        """
+    def __init__(self, fieldnames: list[str], encoding: str = 'utf-8') -> None:
         self.fieldnames = fieldnames
+        self.encoding = encoding
 
     def write(self, file_path: str, data: list[dict[str, Any]]) -> None:
-        """
-        Write products to CSV file with standardized columns.
-
-        Args:
-            file_path: Path to output CSV file
-            data: List of product dictionaries
-            skip_processing: If True, skip data processing (data is already processed)
-        """
         if not data:
-            print(f'No data to write to {file_path}')
             return
 
-        # Write to CSV
-        with open(file_path, 'w', encoding='utf-8', newline='') as outfile:
+        with open(file_path, 'w', encoding=self.encoding, newline='') as outfile:
             writer = csv.DictWriter(outfile, fieldnames=self.fieldnames)
             writer.writeheader()
             writer.writerows(data)
-
-        print(f'Successfully wrote {len(data)} records to {file_path}')

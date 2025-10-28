@@ -1,9 +1,14 @@
 import csv
+import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Any
 
 from constants import VOLUME_MAP
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 
 class FileReader(ABC):
@@ -50,9 +55,8 @@ class CSVReader(FileReader):
             with open(file_path, 'r', encoding=self.encoding) as f:
                 reader = csv.DictReader(f)
                 data = list(reader)
-            print(f'Successfully read {len(data)} records from {file_path}')
         except Exception as e:
-            print(f'Error reading CSV file {file_path}: {e}')
+            logger.error(f'Error reading CSV file {file_path}: {e}')
 
         return data
 
@@ -160,6 +164,7 @@ class ValvolineProductProcessor(ProductProcessor):
 
         normalized_name = remove_russian_characters(normalized_name)
         normalized_name = normalize_viscosity_grades(normalized_name)
+        normalized_name = normalized_name.strip()
 
         normalized_name = f'{normalized_name} {volume_number} {volume_unit}'.lower()
 
@@ -243,17 +248,13 @@ class CSVProductFilter:
         Returns:
             List of filtered and processed data
         """
-        # Read all data
         all_data = self.reader.read(input_file)
 
-        # Filter and process data
         filtered_data = []
         for row in all_data:
             if self.filter.should_include(row):
                 processed_row = self.processor.process_row(row)
                 filtered_data.append(processed_row)
-
-        print(f'First 10 rows of filtered data: {filtered_data[:10]}')
 
         return filtered_data
 
@@ -297,7 +298,6 @@ def normalize_viscosity_grades(text: str) -> str:
     if not text:
         return ''
 
-    # Remove hyphens from viscosity grades pattern: digits + W + hyphen + digits
     normalized = re.sub(r'(\d+w)-(\d+)', r'\1\2', text)
 
     return normalized
@@ -330,7 +330,7 @@ def parse_volume_from_string(text: str) -> tuple[str, str, str]:
 
     for pattern in end_patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match and not volume_number:  # Only if we haven't found volume yet
+        if match and not volume_number:
             volume_number = match.group(1)
             volume_unit_raw = match.group(2).lower()
             if volume_unit_raw in VOLUME_MAP:
@@ -347,18 +347,12 @@ def remove_russian_characters(text: str) -> str:
 def normalize_product_name(name: str) -> str:
     if not name:
         return ''
-    # Step 1: Apply common normalization first
     name = str(name).strip()
 
     # Remove digits from the end (for cases like "866904")
-    # This handles cases where there are product codes at the end
     name = re.sub(r'\s+\d+\s*$', '', name)
 
-    # Clean up the text
-    name = re.sub(r'\s+', ' ', name).strip()
-    name = re.sub(r'^,\s*|,\s*$', '', name)  # Remove leading/trailing commas
-
-    # replace "(" and ")" to backspace
+    name = re.sub(r'^,\s*|,\s*$', '', name)
     name = re.sub(r'\(|\)', ' ', name)
 
     normalized = re.sub(r'\band\b', '&', name, flags=re.IGNORECASE)
@@ -369,7 +363,7 @@ def normalize_product_name(name: str) -> str:
 
     normalized = re.sub(r'[.,]', '', normalized)
 
-    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    normalized = re.sub(r'\s+', ' ', normalized)
 
     return normalized
 

@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -8,14 +9,15 @@ from csv_reader import (
 )
 from Levenshtein import distance
 from writer import CSVWriter
-from xlsx_reader import (
-    ForsageNormalizer,
-    ForsageXlsxReader,
-    RosneftNormalizer,
-    RosneftXlsxReader,
-    ValvolineNormalizer,
-    ValvolineXlsxReader,
+from xlsx_parsers import (
+    ForsageXlsxParser,
+    RosneftXlsxParser,
+    ValvolineXlsxParser,
 )
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 
 def match_valvoline_products(
@@ -23,7 +25,7 @@ def match_valvoline_products(
     xlsx_file: str,
     output_file: str = None,
     max_distance: int = 3,
-    encoding: str = 'cp1251',
+    encoding: str = 'utf-8',
 ) -> None:
     """
     Match Valvoline products from CSV file with XLSX file using Levenshtein distance.
@@ -35,25 +37,13 @@ def match_valvoline_products(
         max_distance: Maximum Levenshtein distance for a match
         encoding: CSV file encoding
     """
-    print(f'\n=== MATCHING VALVOLINE PRODUCTS ===')
-    print(f'CSV file: {csv_file}')
-    print(f'XLSX file: {xlsx_file}')
-    print(f'Max distance: {max_distance}')
-
-    # Read CSV products
     csv_products = filter_valvoline_products(csv_file, encoding=encoding)
-    print(f'Found {len(csv_products)} Valvoline products in CSV')
 
-    # Read XLSX products
-    valvoline_normalizer = ValvolineNormalizer()
-    xlsx_reader = ValvolineXlsxReader(file_path=xlsx_file, normalizer=valvoline_normalizer)
+    xlsx_reader = ValvolineXlsxParser(file_path=xlsx_file)
     xlsx_products = xlsx_reader.parse_xlsx()
-    print(f'Found {len(xlsx_products)} Valvoline products in XLSX')
 
-    # Match products
-    matched_results = _match_products(csv_products, xlsx_products, max_distance, 'Valvoline')
+    matched_results = _match_products(csv_products, xlsx_products, max_distance)
 
-    # Process Valvoline-specific data for CSV output
     if output_file and matched_results:
         processed_results = _process_valvoline_data(matched_results)
         fieldnames = [
@@ -71,7 +61,6 @@ def match_valvoline_products(
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, processed_results)
-        print(f'Matched results saved to {output_file}')
 
 
 def _process_valvoline_data(matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -117,7 +106,6 @@ def _process_valvoline_data(matched_results: list[dict[str, Any]]) -> list[dict[
             'csv_name': item.get('csv_name', ''),
             'xlsx_name': item.get('xlsx_name', ''),
             'distance': item.get('distance', ''),
-            'csv_price': f'{csv_price:.2f}',
             'xlsx_price': f'{xlsx_price:.2f}',
             'csv_volume': csv_volume,
             'csv_volume_unit': csv_volume_unit,
@@ -140,39 +128,19 @@ def match_rosneft_products(
 ) -> None:
     """
     Match Rosneft products from CSV file with XLSX file using Levenshtein distance.
-
-    Args:
-        csv_file: Path to CSV file with Rosneft products
-        xlsx_file: Path to XLSX file with Rosneft products
-        output_file: Path to output CSV file for matched results (optional)
-        max_distance: Maximum Levenshtein distance for a match
-        encoding: CSV file encoding
     """
-    print(f'\n=== MATCHING ROSNEFT PRODUCTS ===')
-    print(f'CSV file: {csv_file}')
-    print(f'XLSX file: {xlsx_file}')
-    print(f'Max distance: {max_distance}')
-
-    # Read CSV products
     csv_products = filter_rosneft_products(csv_file, encoding=encoding)
-    print(f'Found {len(csv_products)} Rosneft products in CSV')
 
-    # Read XLSX products
-    rosneft_normalizer = RosneftNormalizer()
-    xlsx_reader = RosneftXlsxReader(file_path=xlsx_file, normalizer=rosneft_normalizer)
+    xlsx_reader = RosneftXlsxParser(file_path=xlsx_file)
     xlsx_products = xlsx_reader.parse_xlsx()
-    print(f'Found {len(xlsx_products)} Rosneft products in XLSX')
 
-    # Match products
-    matched_results = _match_products(csv_products, xlsx_products, max_distance, 'Rosneft')
+    matched_results = _match_products(csv_products, xlsx_products, max_distance)
 
-    # Write results to CSV if output file specified
     if output_file and matched_results:
         fieldnames = [
             'csv_name',
             'xlsx_name',
             'distance',
-            'csv_price',
             'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
@@ -181,7 +149,6 @@ def match_rosneft_products(
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, matched_results)
-        print(f'Matched results saved to {output_file}')
 
 
 def match_forsage_products(
@@ -193,39 +160,19 @@ def match_forsage_products(
 ) -> None:
     """
     Match Forsage products from CSV file with XLSX file using Levenshtein distance.
-
-    Args:
-        csv_file: Path to CSV file with Forsage products
-        xlsx_file: Path to XLSX file with Forsage products
-        output_file: Path to output CSV file for matched results (optional)
-        max_distance: Maximum Levenshtein distance for a match
-        encoding: CSV file encoding
     """
-    print(f'\n=== MATCHING FORSAGE PRODUCTS ===')
-    print(f'CSV file: {csv_file}')
-    print(f'XLSX file: {xlsx_file}')
-    print(f'Max distance: {max_distance}')
-
-    # Read CSV products
     csv_products = filter_forsage_products(csv_file, encoding=encoding)
-    print(f'Found {len(csv_products)} Forsage products in CSV')
 
-    # Read XLSX products
-    forsage_normalizer = ForsageNormalizer()
-    xlsx_reader = ForsageXlsxReader(file_path=xlsx_file, normalizer=forsage_normalizer)
+    xlsx_reader = ForsageXlsxParser(file_path=xlsx_file)
     xlsx_products = xlsx_reader.parse_xlsx()
-    print(f'Found {len(xlsx_products)} Forsage products in XLSX')
 
-    # Match products
-    matched_results = _match_products(csv_products, xlsx_products, max_distance, 'Forsage')
+    matched_results = _match_products(csv_products, xlsx_products, max_distance)
 
-    # Write results to CSV if output file specified
     if output_file and matched_results:
         fieldnames = [
             'csv_name',
             'xlsx_name',
             'distance',
-            'csv_price',
             'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
@@ -234,14 +181,12 @@ def match_forsage_products(
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, matched_results)
-        print(f'Matched results saved to {output_file}')
 
 
 def _match_products(
     csv_products: list[dict[str, Any]],
     xlsx_products: list[dict[str, Any]],
     max_distance: int,
-    brand_name: str,
 ) -> list[dict[str, Any]]:
     """
     Internal function to match products between CSV and XLSX data.
@@ -250,14 +195,12 @@ def _match_products(
         csv_products: List of products from CSV
         xlsx_products: List of products from XLSX
         max_distance: Maximum Levenshtein distance for a match
-        brand_name: Brand name for display purposes
 
     Returns:
         List of matched products with comparison data
     """
     matches_found = 0
     matched_results = []
-    print(f'\n=== MATCHING RESULTS FOR {brand_name} ===')
 
     for csv_product in csv_products:
         csv_name = csv_product.get('normalized_name', '').strip()
@@ -273,7 +216,23 @@ def _match_products(
             if not xlsx_name:
                 continue
 
-            dist = distance(csv_name.lower(), xlsx_name.lower())
+            if csv_product.get('volume', '') != xlsx_product.get('volume', ''):
+                logger.debug(
+                    f'volume mismatch: "{csv_product.get("volume", "")}",'
+                    f'"{xlsx_product.get("volume", "")}"'
+                )
+                continue
+            if csv_product.get('volume_unit', '') != xlsx_product.get('volume_unit', ''):
+                logger.debug(
+                    f'volume unit mismatch: "{csv_product.get("volume_unit", "")}",'
+                    f'"{xlsx_product.get("volume_unit", "")}"'
+                )
+                continue
+
+            dist = distance(
+                ' '.join(sorted(csv_name.split())),
+                ' '.join(sorted(xlsx_name.split()))
+            )
             if dist < best_distance:
                 best_distance = dist
                 best_match = xlsx_name
@@ -281,19 +240,13 @@ def _match_products(
 
         if best_match and best_distance <= max_distance:
             matches_found += 1
-            print(f'MATCH (distance: {best_distance})')
-            print(f'CSV: "{csv_name}"')
-            print(f'XLSX: "{best_match}"')
-            print(f'CSV Price: {csv_product.get("price", "N/A")}')
-            print(f'XLSX Price: {best_match_product.get("price", "N/A")}')
+            logger.info(f'match found: "{csv_name}", (distance: {best_distance})')
 
-            # Add to results for CSV output
             matched_results.append(
                 {
                     'csv_name': csv_name,
                     'xlsx_name': best_match,
                     'distance': best_distance,
-                    'csv_price': csv_product.get('price', ''),
                     'xlsx_price': best_match_product.get('price', ''),
                     'csv_volume': csv_product.get('volume', ''),
                     'csv_volume_unit': csv_product.get('volume_unit', ''),
@@ -302,15 +255,9 @@ def _match_products(
                 }
             )
         else:
-            pass
-            # print(f'NO MATCH (best distance: {best_distance})')
+            logger.debug(f'no match found for "{csv_name}"')
 
-    print(f'=== {brand_name} SUMMARY ===')
-    print(f'Total products in CSV: {len(csv_products)}')
-    print(f'Total products in XLSX: {len(xlsx_products)}')
-    print(f'Matches found: {matches_found}')
-    if len(csv_products) > 0:
-        print(f'Match rate: {matches_found / len(csv_products) * 100:.1f}%')
+    logger.debug(f'Matches found: {matches_found}')
 
     return matched_results
 
