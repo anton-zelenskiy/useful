@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from constants import VolumeUnit
 from csv_reader import (
     filter_forsage_products,
     filter_rosneft_products,
@@ -47,59 +48,79 @@ def match_valvoline_products(
     xlsx_products = xlsx_reader.parse_xlsx()
 
     matched_results = _match_products(csv_products, xlsx_products, max_distance)
+    processed_results = _calculate_price(matched_results)
 
-    if output_file and matched_results:
-        processed_results = _process_valvoline_data(matched_results)
+    if output_file and processed_results:
         fieldnames = [
             'name',
+            'price',
             'csv_name',
             'xlsx_name',
             'distance',
-            'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
             'xlsx_volume',
             'xlsx_volume_unit',
-            'xlsx_price_total',
+            'xlsx_price',
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, processed_results)
 
 
-def _process_valvoline_data(matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _calculate_price(matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Process Valvoline-specific data for CSV output.
+    Calculate total price based on volume and unit conversion.
+
+    All prices are per 1 liter. If volume_unit is ml, convert to liters.
 
     Args:
         matched_results: List of matched products
 
     Returns:
-        Processed data with Valvoline-specific calculations
+        Processed data with calculated total prices
     """
     processed_data = []
 
     for item in matched_results:
-        xlsx_price_str = item.get('xlsx_price', '')
+        xlsx_price_str = item.get('price', '')
         xlsx_volume = item.get('xlsx_volume', '')
-        xlsx_volume_unit = item.get('xlsx_volume_unit', '')
+        xlsx_volume_unit = VolumeUnit(item.get('xlsx_volume_unit', VolumeUnit.L))
 
         try:
             xlsx_price = Decimal(str(xlsx_price_str)) if xlsx_price_str else Decimal('0')
             xlsx_volume_decimal = Decimal(xlsx_volume) if xlsx_volume else Decimal('0')
-            xlsx_volume_unit_decimal = Decimal(xlsx_volume_unit) if xlsx_volume_unit else Decimal('0')
-            xlsx_price_total = xlsx_price * xlsx_volume_unit_decimal * xlsx_volume_decimal
+
+            # Convert volume to liters for price calculation
+            volume_in_liters = _convert_volume_to_liters(xlsx_volume_decimal, xlsx_volume_unit)
+            xlsx_price_total = xlsx_price * volume_in_liters
         except (InvalidOperation, ValueError):
-            xlsx_price = Decimal('0')
             xlsx_price_total = Decimal('0')
 
         processed_item = {
             **item,
-            'xlsx_price': f'{xlsx_price:.2f}',
-            'xlsx_price_total': f'{xlsx_price_total:.2f}',
+            'price': f'{xlsx_price_total:.2f}',
         }
         processed_data.append(processed_item)
 
     return processed_data
+
+
+def _convert_volume_to_liters(volume: Decimal, unit: VolumeUnit) -> Decimal:
+    """
+    Convert volume to liters based on unit.
+
+    Args:
+        volume: Volume value
+        unit: VolumeUNit
+
+    Returns:
+        Volume in liters
+    """
+
+    if unit == VolumeUnit.ML:
+        return volume / Decimal('1000')
+
+    return volume
 
 
 def match_rosneft_products(
@@ -122,14 +143,15 @@ def match_rosneft_products(
     if output_file and matched_results:
         fieldnames = [
             'name',
+            'price',
             'csv_name',
             'xlsx_name',
             'distance',
-            'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
             'xlsx_volume',
             'xlsx_volume_unit',
+            'xlsx_price',
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, matched_results)
@@ -155,14 +177,15 @@ def match_forsage_products(
     if output_file and matched_results:
         fieldnames = [
             'name',
+            'price',
             'csv_name',
             'xlsx_name',
             'distance',
-            'xlsx_price',
             'csv_volume',
             'csv_volume_unit',
             'xlsx_volume',
             'xlsx_volume_unit',
+            'xlsx_price',
         ]
         writer = CSVWriter(fieldnames)
         writer.write(output_file, matched_results)
@@ -226,24 +249,28 @@ def _match_products(
         if best_match and best_distance <= max_distance:
             matches_found += 1
             logger.info(
-                f'match found: "{csv_name}", (distance: {best_distance})'
-                f'volume: "{best_match_product.get("volume", "")}")'
-                f'volume unit: "{best_match_product.get("volume_unit", "")}")'
-                f'price: "{best_match_product.get("price", "")}")'
-                f'package count: "{best_match_product.get("package_count", "")}")'
+                f'match found: "{csv_name}", (distance: {best_distance})\n'
+                f'volume: "{best_match_product.get("volume", "")}")\n'
+                f'volume unit: "{best_match_product.get("volume_unit", "")}")\n'
+                f'price: "{best_match_product.get("price", "")}")\n'
+                f'package count: "{best_match_product.get("package_count", "")}")\n\n'
             )
+
+            price = best_match_product.get('price', '')
+            price = Decimal(price) if price else Decimal('0')
 
             matched_results.append(
                 {
                     'name': csv_product.get('original_name', ''),
+                    'price': f'{price:.2f}',
                     'csv_name': csv_name,
                     'xlsx_name': best_match,
                     'distance': best_distance,
-                    'xlsx_price': best_match_product.get('price', ''),
                     'csv_volume': csv_product.get('volume', ''),
                     'csv_volume_unit': csv_product.get('volume_unit', ''),
                     'xlsx_volume': best_match_product.get('volume', ''),
                     'xlsx_volume_unit': best_match_product.get('volume_unit', ''),
+                    'xlsx_price': f'{price:.2f}',
                 }
             )
         else:
