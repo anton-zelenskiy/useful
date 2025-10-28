@@ -42,7 +42,7 @@ def normalize_viscosity_grades(text: str) -> str:
     if not text:
         return ''
 
-    normalized = re.sub(r'(\d+w)-(\d+)', r'\1\2', text)
+    normalized = re.sub(r'(\d+w)-(\d+)', r'\1\2', text, flags=re.IGNORECASE)
 
     return normalized
 
@@ -67,26 +67,22 @@ def parse_volume_from_string(text: str) -> tuple[str, str, str]:
     volume_number = ''
     volume_unit = ''
 
-    end_patterns = [
-        r'\s+(\d+(?:\.\d+)?)\s*([а-яё]+)\.?\s*$',  # " 4 л"
-        r'(\d+(?:\.\d+)?)\s*([а-яё]+)\.?\s*$',  # "4л."
-    ]
 
-    for pattern in end_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match and not volume_number:
-            volume_number = match.group(1)
-            volume_unit_raw = match.group(2).lower()
-            if volume_unit_raw in VOLUME_MAP:
-                volume_unit = VOLUME_MAP[volume_unit_raw]
-                text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-                break
+    pattern = r'(\d+(?:\.\d+)?)\s*(л|мл|кг|г)\.?\s*$'
+    
+    match = re.search(pattern, text, re.IGNORECASE)
+    if match:
+        volume_number = match.group(1)
+        volume_unit_raw = match.group(2).lower()
+        if volume_unit_raw in VOLUME_MAP:
+            volume_unit = VOLUME_MAP[volume_unit_raw]
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE).strip()
 
     return text, volume_number, volume_unit
 
 
 def remove_russian_characters(text: str) -> str:
-    return re.sub(r'[а-яё]', '', text, flags=re.IGNORECASE)
+    return re.sub(r'[а-яё]', '', text, flags=re.IGNORECASE).strip()
 
 
 def normalize_product_name(name: str) -> str:
@@ -101,13 +97,10 @@ def normalize_product_name(name: str) -> str:
     name = re.sub(r'\(|\)', ' ', name)
 
     normalized = re.sub(r'\band\b', '&', name, flags=re.IGNORECASE)
+    normalized = normalized.lower()
+    normalized = re.sub(r'[.,]', '', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized)
 
     normalized = remove_duplicate_words(normalized)
-
-    normalized = normalized.lower()
-
-    normalized = re.sub(r'[.,]', '', normalized)
-
-    normalized = re.sub(r'\s+', ' ', normalized)
 
     return normalized
