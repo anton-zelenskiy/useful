@@ -18,7 +18,6 @@ class BaseXlsxParser(ABC):
 
         Args:
             file_path: Path to XLSX file
-            normalizer: Normalizer instance for this reader
         """
         self.file_path = Path(file_path)
 
@@ -30,48 +29,59 @@ class BaseXlsxParser(ABC):
         Returns:
             List of dictionaries with product data
         """
-        pass
+
+    def _find_column_by_pattern(self, df: pd.DataFrame, pattern: str) -> str | None:
+        """
+        Find the first column that matches the given pattern.
+        """
+        matching_cols = [col for col in df.columns if pattern in str(col)]
+        if matching_cols:
+            return matching_cols[0]
+        return None
+
+    def _get_column_value(self, row: pd.Series, column_name: str | None) -> str:
+        """
+        Get column value from row, handling NaN and empty values.
+        """
+        if not column_name or column_name not in row.index:
+            return ''
+
+        value = row[column_name]
+        if pd.isna(value):
+            return ''
+
+        return str(value).strip()
 
 
 class ValvolineXlsxParser(BaseXlsxParser):
+    NAME_COLUMN = 'Наименование'
+    PACKAGE_COLUMN = 'Упаковка'
+    PRICE_COLUMN = 'Окончательная цена с НДС за 1л'
+
     def parse_xlsx(self) -> list[dict[str, Any]]:
         try:
             df = pd.read_excel(self.file_path, skiprows=2, header=0)
 
+            name_column = self._find_column_by_pattern(df, self.NAME_COLUMN)
+            package_column = self._find_column_by_pattern(df, self.PACKAGE_COLUMN)
+            price_column = self._find_column_by_pattern(df, self.PRICE_COLUMN)
+
+            if not name_column:
+                logging.warning('Name column not found in Valvoline file')
+                return []
+
             products = []
-            total_rows = 0
 
-            for idx, row in df.iterrows():
-                total_rows += 1
-
-                name_cols = [col for col in df.columns if 'Наименование' in str(col)]
-                if not name_cols:
+            for _, row in df.iterrows():
+                name = self._get_column_value(row, name_column)
+                if not name or name.lower() == 'nan':
                     continue
 
-                name = str(row[name_cols[0]]).strip()
-                if pd.isna(row[name_cols[0]]) or not name or name.lower() == 'nan':
-                    continue
-
-                # Get other columns
-                package_cols = [col for col in df.columns if 'Упаковка' in str(col)]
-                price_cols = [
-                    col for col in df.columns if 'Окончательная цена с НДС за 1л' in str(col)
-                ]
-
-                package = (
-                    str(row[package_cols[0]]).strip()
-                    if package_cols and not pd.isna(row[package_cols[0]])
-                    else ''
-                )
+                package = self._get_column_value(row, package_column)
+                price = self._get_column_value(row, price_column)
 
                 normalized_name = self._normalize_name(name)
                 package_count, volume, volume_unit = self._parse_package_info(package)
-
-                price = (
-                    str(row[price_cols[0]]).strip()
-                    if price_cols and not pd.isna(row[price_cols[0]])
-                    else ''
-                )
 
                 product = {
                     'original_name': name,
@@ -172,34 +182,29 @@ class ValvolineXlsxParser(BaseXlsxParser):
 
 
 class ForsageXlsxParser(BaseXlsxParser):
+    NAME_COLUMN = 'Forsage'
+    PACKAGE_COLUMN = 'Фасовка'
+    PRICE_COLUMN = 'Себестоимость с НДС'
+
     def parse_xlsx(self) -> list[dict[str, Any]]:
         try:
-            columns_to_read = ['Forsage', 'Фасовка', 'Себестоимость с НДС']
+            columns_to_read = [self.NAME_COLUMN, self.PACKAGE_COLUMN, self.PRICE_COLUMN]
             df = pd.read_excel(self.file_path, usecols=columns_to_read)
 
             products = []
             current_product_name = None
 
-            for idx, row in df.iterrows():
-                product_name = row['Forsage']
-                if not pd.isna(product_name) and str(product_name).strip():
-                    current_product_name = str(product_name).strip()
+            for _, row in df.iterrows():
+                product_name = self._get_column_value(row, self.NAME_COLUMN)
+                if product_name:
+                    current_product_name = product_name
                     logging.debug(f'found new product: "{current_product_name}"')
 
                 if current_product_name:
-                    package_val = row['Фасовка']
-                    price_val = row['Себестоимость с НДС']
+                    package_str = self._get_column_value(row, self.PACKAGE_COLUMN)
+                    price_str = self._get_column_value(row, self.PRICE_COLUMN)
 
-                    if (
-                        not pd.isna(package_val)
-                        and str(package_val).strip()
-                        and not pd.isna(price_val)
-                        and str(price_val).strip()
-                    ):
-                        package_str = str(package_val).strip()
-                        price_str = str(price_val).strip()
-
-                        # Parse package info using writer's method
+                    if package_str and price_str:
                         package_count, volume, volume_unit = self._parse_package_info(package_str)
 
                         product = {
@@ -254,60 +259,54 @@ class ForsageXlsxParser(BaseXlsxParser):
 
 
 class RosneftXlsxParser(BaseXlsxParser):
-    def parse_xlsx(self) -> list[dict[str, Any]]:
+    NAME_COLUMN = 'Наименование'
+    PACKAGE_COLUMN = 'Упаковка'
+
+    def parse_xlsx(self, sheet_name: str = 'РНПК') -> list[dict[str, Any]]:
         try:
-            sheet_name = 'РНПК'
             logging.info(f'reading sheet: {sheet_name}')
 
             df = pd.read_excel(self.file_path, sheet_name=sheet_name, skiprows=9, header=0)
 
-            name_column = 'Наименование'
+            name_column = self._find_column_by_pattern(df, self.NAME_COLUMN)
+            package_column = self._find_column_by_pattern(df, self.PACKAGE_COLUMN)
             price_column = df.columns[8]
-            package_column = 'Упаковка'
+
+            if not name_column:
+                logging.warning('Name column not found in Rosneft file')
+                return []
 
             products = []
             current_product_name = None
 
-            for idx, row in df.iterrows():
-                name_val = row[name_column]
-                if not pd.isna(name_val) and str(name_val).strip():
-                    current_product_name = str(name_val).strip()
+            for _, row in df.iterrows():
+                name_val = self._get_column_value(row, name_column)
+                if name_val:
+                    current_product_name = name_val
                     logging.debug(f'Found new product: "{current_product_name}"')
 
-                package_val = row[package_column]
-                price_val = row[price_column]
+                package_val = self._get_column_value(row, package_column)
+                price_val = self._get_column_value(row, price_column)
 
-                if pd.isna(package_val) and pd.isna(price_val):
+                if not package_val and not price_val:
                     continue
 
-                if current_product_name:
-                    package_val = row[package_column]
-                    price_val = row[price_column]
+                if current_product_name and package_val and price_val:
+                    package_count, volume, volume_unit = self._parse_package_info(package_val)
 
-                    if (
-                        not pd.isna(package_val)
-                        and str(package_val).strip()
-                        and not pd.isna(price_val)
-                        and str(price_val).strip()
-                    ):
-                        package_str = str(package_val).strip()
-                        price_str = str(price_val).strip()
+                    normalized_name = normalize_product_name(current_product_name)
+                    product = {
+                        'original_name': current_product_name,
+                        'normalized_name': normalized_name,
+                        'volume': volume,
+                        'volume_unit': volume_unit,
+                        'package_count': package_count,
+                        'price': price_val,
+                        'package': package_val,
+                    }
+                    products.append(product)
 
-                        package_count, volume, volume_unit = self._parse_package_info(package_str)
-
-                        normalized_name = normalize_product_name(current_product_name)
-                        product = {
-                            'original_name': current_product_name,
-                            'normalized_name': normalized_name,
-                            'volume': volume,
-                            'volume_unit': volume_unit,
-                            'package_count': package_count,
-                            'price': price_str,
-                            'package': package_str,
-                        }
-                        products.append(product)
-
-                        logging.debug(f'added product: {package_str} - {price_str}')
+                    logging.debug(f'added product: {package_val} - {price_val}')
 
             logging.info(f'total products found: {len(products)}')
 

@@ -101,7 +101,7 @@ class ReportGenerator(ABC):
         xlsx_products = xlsx_parser.parse_xlsx()
 
         # Match products
-        matched_results = _match_products(csv_products, xlsx_products, max_distance)
+        matched_results = self._match_products(csv_products, xlsx_products, max_distance)
 
         # Process results if needed
         processed_results = self.process_results(matched_results)
@@ -111,6 +111,95 @@ class ReportGenerator(ABC):
             fieldnames = self.get_fieldnames()
             writer = CSVWriter(fieldnames)
             writer.write(output_file, processed_results)
+
+    def _match_products(
+        self,
+        csv_products: list[dict[str, Any]],
+        xlsx_products: list[dict[str, Any]],
+        max_distance: int,
+    ) -> list[dict[str, Any]]:
+        """
+        Internal function to match products between CSV and XLSX data.
+
+        Args:
+            csv_products: List of products from CSV
+            xlsx_products: List of products from XLSX
+            max_distance: Maximum Levenshtein distance for a match
+
+        Returns:
+            List of matched products with comparison data
+        """
+        matches_found = 0
+        matched_results = []
+
+        for csv_product in csv_products:
+            csv_name = csv_product.get('normalized_name', '').strip()
+            if not csv_name:
+                continue
+
+            best_match = None
+            best_distance = float('inf')
+            best_match_product = None
+
+            for xlsx_product in xlsx_products:
+                xlsx_name = xlsx_product.get('normalized_name', '').strip()
+                if not xlsx_name:
+                    continue
+
+                if csv_product.get('volume', '') != xlsx_product.get('volume', ''):
+                    logger.debug(
+                        f'volume mismatch: "{csv_product.get("volume", "")}",'
+                        f'"{xlsx_product.get("volume", "")}"'
+                    )
+                    continue
+                if csv_product.get('volume_unit', '') != xlsx_product.get('volume_unit', ''):
+                    logger.debug(
+                        f'volume unit mismatch: "{csv_product.get("volume_unit", "")}",'
+                        f'"{xlsx_product.get("volume_unit", "")}"'
+                    )
+                    continue
+
+                dist = distance(
+                    ' '.join(sorted(csv_name.split())), ' '.join(sorted(xlsx_name.split()))
+                )
+                if dist < best_distance:
+                    best_distance = dist
+                    best_match = xlsx_name
+                    best_match_product = xlsx_product
+
+            if best_match and best_distance <= max_distance:
+                matches_found += 1
+                logger.info(
+                    f'match found: "{csv_name}", (distance: {best_distance})\n'
+                    f'volume: "{best_match_product.get("volume", "")}")\n'
+                    f'volume unit: "{best_match_product.get("volume_unit", "")}")\n'
+                    f'price: "{best_match_product.get("price", "")}")\n'
+                    f'package count: "{best_match_product.get("package_count", "")}")\n\n'
+                )
+
+                price = best_match_product.get('price', '')
+                price = Decimal(price) if price else Decimal('0')
+
+                matched_results.append(
+                    {
+                        'name': csv_product.get('original_name', ''),
+                        'price': f'{price:.2f}',
+                        'csv_name': csv_name,
+                        'xlsx_name': best_match,
+                        'distance': best_distance,
+                        'csv_volume': csv_product.get('volume', ''),
+                        'csv_volume_unit': csv_product.get('volume_unit', ''),
+                        'xlsx_volume': best_match_product.get('volume', ''),
+                        'xlsx_volume_unit': best_match_product.get('volume_unit', ''),
+                        'xlsx_price': f'{price:.2f}',
+                    }
+                )
+            else:
+                logger.debug(f'no match found for "{csv_name}"')
+
+        logger.debug(f'Matches found: {matches_found}')
+
+        return matched_results
 
     def process_results(self, matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
@@ -166,7 +255,9 @@ class ValvolineReportGenerator(ReportGenerator):
                 xlsx_volume_decimal = Decimal(xlsx_volume) if xlsx_volume else Decimal('0')
 
                 # Convert volume to liters for price calculation
-                volume_in_liters = self._convert_volume_to_liters(xlsx_volume_decimal, xlsx_volume_unit)
+                volume_in_liters = self._convert_volume_to_liters(
+                    xlsx_volume_decimal, xlsx_volume_unit
+                )
                 xlsx_price_total = xlsx_price * volume_in_liters
             except (InvalidOperation, ValueError):
                 xlsx_price_total = Decimal('0')
@@ -178,7 +269,6 @@ class ValvolineReportGenerator(ReportGenerator):
             processed_data.append(processed_item)
 
         return processed_data
-
 
     def _convert_volume_to_liters(self, volume: Decimal, unit: VolumeUnit) -> Decimal:
         """
@@ -195,7 +285,6 @@ class ValvolineReportGenerator(ReportGenerator):
             return volume / Decimal('1000')
 
         return volume
-
 
 
 class RosneftReportGenerator(ReportGenerator):
@@ -224,7 +313,6 @@ class ForsageReportGenerator(ReportGenerator):
         return OUTPUT_COLUMNS
 
 
-# Convenience functions that delegate to the appropriate report generator
 def match_valvoline_products(
     csv_file: str,
     xlsx_file: str,
@@ -259,93 +347,6 @@ def match_forsage_products(
     """Match Forsage products from CSV file with XLSX file using Levenshtein distance."""
     generator = ForsageReportGenerator(csv_encoding=encoding)
     generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
-
-
-def _match_products(
-    csv_products: list[dict[str, Any]],
-    xlsx_products: list[dict[str, Any]],
-    max_distance: int,
-) -> list[dict[str, Any]]:
-    """
-    Internal function to match products between CSV and XLSX data.
-
-    Args:
-        csv_products: List of products from CSV
-        xlsx_products: List of products from XLSX
-        max_distance: Maximum Levenshtein distance for a match
-
-    Returns:
-        List of matched products with comparison data
-    """
-    matches_found = 0
-    matched_results = []
-
-    for csv_product in csv_products:
-        csv_name = csv_product.get('normalized_name', '').strip()
-        if not csv_name:
-            continue
-
-        best_match = None
-        best_distance = float('inf')
-        best_match_product = None
-
-        for xlsx_product in xlsx_products:
-            xlsx_name = xlsx_product.get('normalized_name', '').strip()
-            if not xlsx_name:
-                continue
-
-            if csv_product.get('volume', '') != xlsx_product.get('volume', ''):
-                logger.debug(
-                    f'volume mismatch: "{csv_product.get("volume", "")}",'
-                    f'"{xlsx_product.get("volume", "")}"'
-                )
-                continue
-            if csv_product.get('volume_unit', '') != xlsx_product.get('volume_unit', ''):
-                logger.debug(
-                    f'volume unit mismatch: "{csv_product.get("volume_unit", "")}",'
-                    f'"{xlsx_product.get("volume_unit", "")}"'
-                )
-                continue
-
-            dist = distance(' '.join(sorted(csv_name.split())), ' '.join(sorted(xlsx_name.split())))
-            if dist < best_distance:
-                best_distance = dist
-                best_match = xlsx_name
-                best_match_product = xlsx_product
-
-        if best_match and best_distance <= max_distance:
-            matches_found += 1
-            logger.info(
-                f'match found: "{csv_name}", (distance: {best_distance})\n'
-                f'volume: "{best_match_product.get("volume", "")}")\n'
-                f'volume unit: "{best_match_product.get("volume_unit", "")}")\n'
-                f'price: "{best_match_product.get("price", "")}")\n'
-                f'package count: "{best_match_product.get("package_count", "")}")\n\n'
-            )
-
-            price = best_match_product.get('price', '')
-            price = Decimal(price) if price else Decimal('0')
-
-            matched_results.append(
-                {
-                    'name': csv_product.get('original_name', ''),
-                    'price': f'{price:.2f}',
-                    'csv_name': csv_name,
-                    'xlsx_name': best_match,
-                    'distance': best_distance,
-                    'csv_volume': csv_product.get('volume', ''),
-                    'csv_volume_unit': csv_product.get('volume_unit', ''),
-                    'xlsx_volume': best_match_product.get('volume', ''),
-                    'xlsx_volume_unit': best_match_product.get('volume_unit', ''),
-                    'xlsx_price': f'{price:.2f}',
-                }
-            )
-        else:
-            logger.debug(f'no match found for "{csv_name}"')
-
-    logger.debug(f'Matches found: {matches_found}')
-
-    return matched_results
 
 
 if __name__ == '__main__':
