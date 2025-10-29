@@ -1,5 +1,5 @@
 import logging
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from constants import VolumeUnit
@@ -152,12 +152,13 @@ class ReportGenerator:
                 )
 
                 price = best_match_product.get('price', '')
-                price = Decimal(price) if price else Decimal('0')
+                price = Decimal(str(price)) if price else Decimal('0')
+                price = price.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                 matched_results.append(
                     {
                         'name': csv_product.get('original_name', ''),
-                        'price': f'{price:.2f}',
+                        'price': str(price),
                         'csv_name': csv_name,
                         'xlsx_name': best_match,
                         'distance': best_distance,
@@ -165,7 +166,7 @@ class ReportGenerator:
                         'csv_volume_unit': csv_product.get('volume_unit', ''),
                         'xlsx_volume': best_match_product.get('volume', ''),
                         'xlsx_volume_unit': best_match_product.get('volume_unit', ''),
-                        'xlsx_price': f'{price:.2f}',
+                        'xlsx_price': str(price),
                     }
                 )
             else:
@@ -221,13 +222,15 @@ class ValvolineReportGenerator(ReportGenerator):
                 volume_in_liters = self._convert_volume_to_liters(
                     xlsx_volume_decimal, xlsx_volume_unit
                 )
-                xlsx_price_total = xlsx_price * volume_in_liters
+                xlsx_price_total = (xlsx_price * volume_in_liters).quantize(
+                    Decimal('0.01'), rounding=ROUND_HALF_UP
+                )
             except (InvalidOperation, ValueError):
                 xlsx_price_total = Decimal('0')
 
             processed_item = {
                 **item,
-                'price': f'{xlsx_price_total:.2f}',
+                'price': str(xlsx_price_total),
             }
             processed_data.append(processed_item)
 
