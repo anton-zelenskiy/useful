@@ -29,7 +29,6 @@ class BaseXlsxParser(ABC):
         Returns:
             List of dictionaries with product data
         """
-        pass
 
     def _find_column_by_pattern(self, df: pd.DataFrame, pattern: str) -> str | None:
         """

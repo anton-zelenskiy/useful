@@ -19,18 +19,18 @@ logger.propagate = False
 
 
 class FileReader(ABC):
-    """Abstract base class for file readers."""
+    """Base class for file readers."""
 
     @abstractmethod
     def read(self, file_path: str) -> list[dict[str, Any]]:
+        # TODO: return generator
         """
         Read data from file.
 
         Args:
             file_path: Path to input file
 
-        Returns:
-            List of dictionaries read from file
+        returns: list of dictionaries read from file
         """
         pass
 
@@ -39,24 +39,9 @@ class CSVReader(FileReader):
     """CSV file reader."""
 
     def __init__(self, encoding: str = 'utf-8') -> None:
-        """
-        Initialize CSV reader.
-
-        Args:
-            encoding: File encoding
-        """
         self.encoding = encoding
 
     def read(self, file_path: str) -> list[dict[str, Any]]:
-        """
-        Read CSV file.
-
-        Args:
-            file_path: Path to CSV file
-
-        Returns:
-            List of dictionaries from CSV
-        """
         data = []
         try:
             with open(file_path, 'r', encoding=self.encoding) as f:
@@ -69,32 +54,16 @@ class CSVReader(FileReader):
 
 
 class ProductFilter(ABC):
-    """Abstract base class for product filters."""
-
     @abstractmethod
     def should_include(self, row: dict[str, Any]) -> bool:
         """
-        Check if row should be included based on filter criteria.
-
-        Args:
-            row: Row data dictionary
-
-        Returns:
-            True if row should be included
+        Checks if row should be included based on filter criteria.
         """
         pass
 
 
 class ValvolineProductFilter(ProductFilter):
-    """Filter for Valvoline products."""
-
     def __init__(self, match_word: str = 'valvoline') -> None:
-        """
-        Initialize Valvoline filter.
-
-        Args:
-            match_word: Word to match in product name or brand
-        """
         self.match_word = match_word.lower()
 
     def should_include(self, row: dict[str, Any]) -> bool:
@@ -105,15 +74,7 @@ class ValvolineProductFilter(ProductFilter):
 
 
 class RosneftProductFilter(ProductFilter):
-    """Filter for Rosneft products."""
-
     def __init__(self, match_word: str = 'rosneft') -> None:
-        """
-        Initialize Rosneft filter.
-
-        Args:
-            match_word: Word to match in product name or brand
-        """
         self.match_word = match_word.lower()
 
     def should_include(self, row: dict[str, Any]) -> bool:
@@ -124,27 +85,16 @@ class RosneftProductFilter(ProductFilter):
 
 
 class ForsageProductFilter(ProductFilter):
-    """Filter for Forsage products."""
-
     def __init__(self, match_word: str = 'forsage') -> None:
-        """
-        Initialize Forsage filter.
-
-        Args:
-            match_word: Word to match in product name or brand
-        """
         self.match_word = match_word.lower()
 
     def should_include(self, row: dict[str, Any]) -> bool:
-        """Check if row contains Forsage products."""
         name = str(row.get('name', '')).lower()
         brand = str(row.get('brand', '')).lower()
         return self.match_word in name or self.match_word in brand
 
 
 class ProductProcessor(ABC):
-    """Abstract base class for product processors."""
-
     @abstractmethod
     def process_row(self, row: dict[str, Any]) -> dict[str, Any]:
         """
@@ -160,10 +110,7 @@ class ProductProcessor(ABC):
 
 
 class ValvolineProductProcessor(ProductProcessor):
-    """Processor for Valvoline products using the old normalization logic."""
-
     def process_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Process Valvoline product row."""
         original_name = row.get('name', '')
 
         normalized_name = normalize_product_name(original_name)
@@ -184,10 +131,7 @@ class ValvolineProductProcessor(ProductProcessor):
 
 
 class RosneftProductProcessor(ProductProcessor):
-    """Processor for Rosneft products with simple normalization."""
-
     def process_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Process Rosneft product row."""
         original_name = row.get('name', '')
 
         normalized_name = normalize_product_name(original_name)
@@ -204,10 +148,7 @@ class RosneftProductProcessor(ProductProcessor):
 
 
 class ForsageProductProcessor(ProductProcessor):
-    """Processor for Forsage products with simple normalization."""
-
     def process_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Process Forsage product row."""
         original_name = row.get('name', '')
 
         normalized_name = normalize_product_name(original_name)
@@ -224,8 +165,6 @@ class ForsageProductProcessor(ProductProcessor):
 
 
 class CSVProductFilter:
-    """Main class for filtering CSV products."""
-
     def __init__(
         self,
         reader: FileReader,
@@ -237,7 +176,6 @@ class CSVProductFilter:
 
         Args:
             reader: File reader instance
-            writer: File writer instance
             filter_: Product filter instance
             processor: Product processor instance
         """
