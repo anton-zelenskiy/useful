@@ -1,21 +1,21 @@
 import logging
-from abc import ABC, abstractmethod
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol
+from typing import Any
 
 from constants import VolumeUnit
 from csv_reader import (
-    filter_forsage_products,
-    filter_rosneft_products,
-    filter_valvoline_products,
+    CSVReader,
+    ForsageProductFilter,
+    ForsageProductProcessor,
+    ProductReader,
+    RosneftProductFilter,
+    RosneftProductProcessor,
+    ValvolineProductFilter,
+    ValvolineProductProcessor,
 )
 from Levenshtein import distance
 from writer import CSVWriter
-from xlsx_parsers import (
-    ForsageXlsxParser,
-    RosneftXlsxParser,
-    ValvolineXlsxParser,
-)
+from xlsx_parsers import BaseXlsxParser, ForsageXlsxParser, RosneftXlsxParser, ValvolineXlsxParser
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,42 +39,17 @@ OUTPUT_COLUMNS = [
 ]
 
 
-class ProductFilter(Protocol):
-    """Protocol for filtering products from CSV files."""
+class ReportGenerator:
+    """Base class for generating product matching reports."""
 
-    def __call__(self, csv_file: str, encoding: str = 'utf-8') -> list[dict[str, Any]]:
-        """Filter products from CSV file."""
-        ...
+    def __init__(
+        self, product_reader: ProductReader, xlsx_parser_cls: type[BaseXlsxParser]
+    ) -> None:
+        self.product_reader = product_reader
+        self.xlsx_parser_cls = xlsx_parser_cls
 
-
-class XlsxParser(Protocol):
-    """Protocol for parsing XLSX files."""
-
-    def parse_xlsx(self) -> list[dict[str, Any]]:
-        """Parse XLSX file and return products."""
-        ...
-
-
-class ReportGenerator(ABC):
-    """Abstract base class for generating product matching reports."""
-
-    def __init__(self, csv_encoding: str = 'utf-8') -> None:
-        self.csv_encoding = csv_encoding
-
-    @abstractmethod
-    def get_csv_filter(self) -> ProductFilter:
-        """Get the CSV product filter for this brand."""
-        pass
-
-    @abstractmethod
-    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
-        """Get the XLSX parser for this brand."""
-        pass
-
-    @abstractmethod
     def get_fieldnames(self) -> list[str]:
-        """Get the fieldnames for CSV output."""
-        pass
+        return OUTPUT_COLUMNS
 
     def generate_report(
         self,
@@ -93,11 +68,10 @@ class ReportGenerator(ABC):
             max_distance: Maximum Levenshtein distance for a match
         """
         # Get CSV products
-        csv_filter = self.get_csv_filter()
-        csv_products = csv_filter(csv_file, encoding=self.csv_encoding)
+        csv_products = self.product_reader.read_data(csv_file)
 
         # Get XLSX products
-        xlsx_parser = self.get_xlsx_parser(xlsx_file)
+        xlsx_parser = self.xlsx_parser_cls(file_path=xlsx_file)
         xlsx_products = xlsx_parser.parse_xlsx()
 
         # Match products
@@ -216,17 +190,6 @@ class ReportGenerator(ABC):
 
 
 class ValvolineReportGenerator(ReportGenerator):
-    """Report generator for Valvoline products."""
-
-    def get_csv_filter(self) -> ProductFilter:
-        return filter_valvoline_products
-
-    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
-        return ValvolineXlsxParser(file_path=xlsx_file)
-
-    def get_fieldnames(self) -> list[str]:
-        return OUTPUT_COLUMNS
-
     def process_results(self, matched_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Process Valvoline-specific data with price calculations."""
         return self._calculate_price(matched_results)
@@ -287,89 +250,41 @@ class ValvolineReportGenerator(ReportGenerator):
         return volume
 
 
-class RosneftReportGenerator(ReportGenerator):
-    """Report generator for Rosneft products."""
-
-    def get_csv_filter(self) -> ProductFilter:
-        return filter_rosneft_products
-
-    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
-        return RosneftXlsxParser(file_path=xlsx_file)
-
-    def get_fieldnames(self) -> list[str]:
-        return OUTPUT_COLUMNS
-
-
-class ForsageReportGenerator(ReportGenerator):
-    """Report generator for Forsage products."""
-
-    def get_csv_filter(self) -> ProductFilter:
-        return filter_forsage_products
-
-    def get_xlsx_parser(self, xlsx_file: str) -> XlsxParser:
-        return ForsageXlsxParser(file_path=xlsx_file)
-
-    def get_fieldnames(self) -> list[str]:
-        return OUTPUT_COLUMNS
-
-
-def match_valvoline_products(
-    csv_file: str,
-    xlsx_file: str,
-    output_file: str = None,
-    max_distance: int = 3,
-    encoding: str = 'utf-8',
-) -> None:
-    """Match Valvoline products from CSV file with XLSX file using Levenshtein distance."""
-    generator = ValvolineReportGenerator(csv_encoding=encoding)
-    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
-
-
-def match_rosneft_products(
-    csv_file: str,
-    xlsx_file: str,
-    output_file: str = None,
-    max_distance: int = 3,
-    encoding: str = 'cp1251',
-) -> None:
-    """Match Rosneft products from CSV file with XLSX file using Levenshtein distance."""
-    generator = RosneftReportGenerator(csv_encoding=encoding)
-    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
-
-
-def match_forsage_products(
-    csv_file: str,
-    xlsx_file: str,
-    output_file: str = None,
-    max_distance: int = 3,
-    encoding: str = 'cp1251',
-) -> None:
-    """Match Forsage products from CSV file with XLSX file using Levenshtein distance."""
-    generator = ForsageReportGenerator(csv_encoding=encoding)
-    generator.generate_report(csv_file, xlsx_file, output_file, max_distance)
-
-
 if __name__ == '__main__':
-    match_valvoline_products(
+    csv_encoding = 'cp1251'
+
+    reader = CSVReader(encoding=csv_encoding)
+    filter_ = ValvolineProductFilter()
+    processor = ValvolineProductProcessor()
+    product_reader = ProductReader(reader, filter_, processor)
+    generator = ValvolineReportGenerator(product_reader, ValvolineXlsxParser)
+    generator.generate_report(
         csv_file='data/ms_ozon_product_202510261943.csv',
         xlsx_file='data/Прайс ВАЛСАР с 01.09.2025_new.xlsx',
         output_file='data/valvoline_products_matched.csv',
         max_distance=3,
-        encoding='cp1251',
     )
 
-    match_forsage_products(
+    reader = CSVReader(encoding=csv_encoding)
+    filter_ = ForsageProductFilter()
+    processor = ForsageProductProcessor()
+    product_reader = ProductReader(reader, filter_, processor)
+    generator = ReportGenerator(product_reader, ForsageXlsxParser)
+    generator.generate_report(
         csv_file='data/ms_ozon_product_202510261943.csv',
         xlsx_file='data/Прайс себестоимость от 01.10.2025г..xlsx',
         output_file='data/forsage_products_matched.csv',
         max_distance=3,
-        encoding='cp1251',
     )
 
-    match_rosneft_products(
+    reader = CSVReader(encoding=csv_encoding)
+    filter_ = RosneftProductFilter()
+    processor = RosneftProductProcessor()
+    product_reader = ProductReader(reader, filter_, processor)
+    generator = ReportGenerator(product_reader, RosneftXlsxParser)
+    generator.generate_report(
         csv_file='data/ms_ozon_product_202510261943.csv',
         xlsx_file='data/Дистрибьюторы_РФ_фасовка_август_2025.xlsm',
         output_file='data/rosneft_products_matched.csv',
         max_distance=3,
-        encoding='cp1251',
     )
