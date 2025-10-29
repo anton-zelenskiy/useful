@@ -31,33 +31,18 @@ class BaseXlsxParser(ABC):
         """
         pass
 
-    def _find_column_by_pattern(self, df: pd.DataFrame, patterns: list[str]) -> str | None:
+    def _find_column_by_pattern(self, df: pd.DataFrame, pattern: str) -> str | None:
         """
-        Find the first column that matches any of the given patterns.
-
-        Args:
-            df: DataFrame to search in
-            patterns: List of patterns to search for in column names
-
-        Returns:
-            Column name if found, None otherwise
+        Find the first column that matches the given pattern.
         """
-        for pattern in patterns:
-            matching_cols = [col for col in df.columns if pattern in str(col)]
-            if matching_cols:
-                return matching_cols[0]
+        matching_cols = [col for col in df.columns if pattern in str(col)]
+        if matching_cols:
+            return matching_cols[0]
         return None
 
     def _get_column_value(self, row: pd.Series, column_name: str | None) -> str:
         """
         Get column value from row, handling NaN and empty values.
-
-        Args:
-            row: DataFrame row
-            column_name: Name of the column to get value from
-
-        Returns:
-            String value or empty string if column not found or value is NaN
         """
         if not column_name or column_name not in row.index:
             return ''
@@ -70,14 +55,17 @@ class BaseXlsxParser(ABC):
 
 
 class ValvolineXlsxParser(BaseXlsxParser):
+    NAME_COLUMN = 'Наименование'
+    PACKAGE_COLUMN = 'Упаковка'
+    PRICE_COLUMN = 'Окончательная цена с НДС за 1л'
+
     def parse_xlsx(self) -> list[dict[str, Any]]:
         try:
             df = pd.read_excel(self.file_path, skiprows=2, header=0)
 
-            # Find column names using patterns
-            name_column = self._find_column_by_pattern(df, ['Наименование'])
-            package_column = self._find_column_by_pattern(df, ['Упаковка'])
-            price_column = self._find_column_by_pattern(df, ['Окончательная цена с НДС за 1л'])
+            name_column = self._find_column_by_pattern(df, self.NAME_COLUMN)
+            package_column = self._find_column_by_pattern(df, self.PACKAGE_COLUMN)
+            price_column = self._find_column_by_pattern(df, self.PRICE_COLUMN)
 
             if not name_column:
                 logging.warning('Name column not found in Valvoline file')
@@ -195,26 +183,29 @@ class ValvolineXlsxParser(BaseXlsxParser):
 
 
 class ForsageXlsxParser(BaseXlsxParser):
+    NAME_COLUMN = 'Forsage'
+    PACKAGE_COLUMN = 'Фасовка'
+    PRICE_COLUMN = 'Себестоимость с НДС'
+
     def parse_xlsx(self) -> list[dict[str, Any]]:
         try:
-            columns_to_read = ['Forsage', 'Фасовка', 'Себестоимость с НДС']
+            columns_to_read = [self.NAME_COLUMN, self.PACKAGE_COLUMN, self.PRICE_COLUMN]
             df = pd.read_excel(self.file_path, usecols=columns_to_read)
 
             products = []
             current_product_name = None
 
             for _, row in df.iterrows():
-                product_name = self._get_column_value(row, 'Forsage')
+                product_name = self._get_column_value(row, self.NAME_COLUMN)
                 if product_name:
                     current_product_name = product_name
                     logging.debug(f'found new product: "{current_product_name}"')
 
                 if current_product_name:
-                    package_str = self._get_column_value(row, 'Фасовка')
-                    price_str = self._get_column_value(row, 'Себестоимость с НДС')
+                    package_str = self._get_column_value(row, self.PACKAGE_COLUMN)
+                    price_str = self._get_column_value(row, self.PRICE_COLUMN)
 
                     if package_str and price_str:
-                        # Parse package info using writer's method
                         package_count, volume, volume_unit = self._parse_package_info(package_str)
 
                         product = {
@@ -269,17 +260,18 @@ class ForsageXlsxParser(BaseXlsxParser):
 
 
 class RosneftXlsxParser(BaseXlsxParser):
-    def parse_xlsx(self) -> list[dict[str, Any]]:
+    NAME_COLUMN = 'Наименование'
+    PACKAGE_COLUMN = 'Упаковка'
+
+    def parse_xlsx(self, sheet_name: str = 'РНПК') -> list[dict[str, Any]]:
         try:
-            sheet_name = 'РНПК'
             logging.info(f'reading sheet: {sheet_name}')
 
             df = pd.read_excel(self.file_path, sheet_name=sheet_name, skiprows=9, header=0)
 
-            # Find column names using patterns
-            name_column = self._find_column_by_pattern(df, ['Наименование'])
-            package_column = self._find_column_by_pattern(df, ['Упаковка'])
-            price_column = df.columns[8]  # Keep this as is since it's position-based
+            name_column = self._find_column_by_pattern(df, self.NAME_COLUMN)
+            package_column = self._find_column_by_pattern(df, self.PACKAGE_COLUMN)
+            price_column = df.columns[8]
 
             if not name_column:
                 logging.warning('Name column not found in Rosneft file')

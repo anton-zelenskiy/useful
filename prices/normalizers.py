@@ -67,9 +67,8 @@ def parse_volume_from_string(text: str) -> tuple[str, str, str]:
     volume_number = ''
     volume_unit = ''
 
-
     pattern = r'(\d+(?:\.\d+)?)\s*(л|мл|кг|г)\.?\s*$'
-    
+
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
         volume_number = match.group(1)
